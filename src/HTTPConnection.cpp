@@ -1,4 +1,5 @@
 #include "HTTPConnection.h"
+#include <cstdio>
 #include <cstring>
 
 namespace multi_get {
@@ -137,8 +138,9 @@ bool HTTPConnection::connect(const std::string &host) {
 
     auto err = ::connect(sock, (struct sockaddr *)&servAddr, sizeof(servAddr));
     if (err != 0) {
-        std::cout << "connect error: " << err << std::endl;
-        std::cout << "Error no: " << errno << std::endl;
+        // std::cout << "connect error: " << err << std::endl;
+        ::perror("Connection Error: ");
+        // std::cout << "Error no: " << errno << std::endl;
         return false;
     }
     socks[host] = sock;
