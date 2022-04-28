@@ -1,0 +1,4 @@
+{
+    "ccls.cache.directory": ".vscode/.ccls-cache",
+    "ccls.misc.compilationDatabaseDirectory": "build"
+}

@@ -13,7 +13,7 @@ enable_testing()
 find_package(Threads)
 
 add_executable(multi-get src/main.cpp src/HTTPResponse.cpp src/HTTPConnection.cpp)
-target_link_libraries(multi-get ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(multi-get ${CMAKE_THREAD_LIBS_INIT} stdc++fs)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})

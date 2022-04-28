@@ -2,6 +2,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -76,7 +77,6 @@ int download(const string &url, size_t threadCount = 1) {
         // cout << "Thread ranges: " << idx + 1<< "-" << idx + range << endl;
         ranges.emplace_back(idx + 1, idx + range);
         threads[i] = std::thread{downloadRange, url, idx + 1, idx + range};
-        // download(url, idx + 1, idx + range);
         idx += range;
     }
 
@@ -84,23 +84,29 @@ int download(const string &url, size_t threadCount = 1) {
         threads[i].join();
     }
 
-    // TODO: 合并下载的文件
     string filename = url.substr(url.find_last_of('/') + 1);
     if (filename.empty())
         filename = "multi-get.downloaded";
 
+    if (filesystem::exists(filename))
+        filesystem::remove(filename);
+
     ofstream output;
-    output.open(filename, std::ios::binary);
-    for (const auto& [start, end] : ranges) {
+    stringstream ss;
+    ss << filename << '.' << ranges[0].first << '-' << ranges[0].second;
+    output.open(ss.str(), std::ios::binary | std::ios::out | std::ios::app);
+    for (int i = 1; i < ranges.size(); ++i) {
         stringstream ss;
-        ss << filename << '.' << start << '-' << end;
+        ss << filename << '.' << ranges[i].first << '-' << ranges[i].second;
         ifstream input;
-        input.open(ss.str(), std::ios::binary);
+        input.open(ss.str(), std::ios::binary | std::ios::in);
         output << input.rdbuf();
         input.close();
-        std::remove(ss.str().c_str());
+        filesystem::remove(ss.str());
     }
     output.close();
+    // just need rename
+    filesystem::rename(ss.str(), filename);
     return fileSize;
 }
 
@@ -108,12 +114,13 @@ int download(const string &url, size_t threadCount = 1) {
 
 int main(int, char **) {
 
-    string url = "http://mirrors.tuna.tsinghua.edu.cn/ubuntu/pool/main/t/tcpdump/tcpdump_4.99.1.orig.tar.gz";
+    // string url = "http://mirrors.tuna.tsinghua.edu.cn/ubuntu/pool/main/t/tcpdump/tcpdump_4.99.1.orig.tar.gz";
     // string url = "http://mirrors.tuna.tsinghua.edu.cn/index.html";
+    string url = "http://localhost/CLion-2020.3.3.tar.gz";
 
     auto start = std::chrono::system_clock::now();
 
-    auto fileSize = multi_get::download(url, 16);
+    auto fileSize = multi_get::download(url, 4);
 
     auto end = std::chrono::system_clock::now();
     auto duration = chrono::duration_cast<chrono::microseconds>(end - start);

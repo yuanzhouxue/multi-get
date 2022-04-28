@@ -17,54 +17,27 @@ HTTPResponse HTTPConnection::get(const std::string &url) {
         return HTTPResponse{};
     }
 
-    std::vector<char> res;
     auto req = constructHeaders(path);
     ::send(socks[host], req.c_str(), req.length(), 0);
 
-    char response;
-    bool gotHeaders = false;
-    std::string receivedHeaders;
-    while (::recv(socks[host], &response, sizeof(response), 0) != 0) {
-        receivedHeaders.push_back(response);
-        if (response == '\r') {
-            if (::recv(socks[host], &response, sizeof(response), 0) != 0) {
-                receivedHeaders.push_back(response);
-                if (response == '\n') {
-                    if (::recv(socks[host], &response, sizeof(response), 0) != 0) {
-                        receivedHeaders.push_back(response);
-                        if (response == '\r') {
-                            if (::recv(socks[host], &response, sizeof(response), 0) != 0) {
-                                receivedHeaders.push_back(response);
-                                if (response == '\n') {
-                                    gotHeaders = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    HTTPResponse resp{receivedHeaders};
+    auto resp = receiveHTTPHeaders(socks[host]);
     // BUF_SIZE = 1MB
     constexpr size_t BUF_SIZE = 1024 * 1024;
-    if (gotHeaders == true) {
-        int contentLength = std::stoi(resp["Content-Length"]);
-        unsigned char buf[BUF_SIZE];
-        int len = 0;
-        int totalLen = 0;
-        std::vector<char> body;
-        body.reserve(contentLength);
-        while ((len = recv(socks[host], buf, BUF_SIZE, 0)) != 0) {
-            body.insert(body.end(), std::begin(buf), std::begin(buf) + len);
-            totalLen += len;
-            if (totalLen == std::stoi(resp["Content-Length"])) {
-                break;
-            }
+    unsigned char buf[BUF_SIZE];
+    int contentLength = std::stoi(resp["Content-Length"]);
+
+    int len = 0;
+    int totalLen = 0;
+    std::vector<char> body;
+    body.reserve(contentLength);
+    while ((len = ::recv(socks[host], buf, BUF_SIZE, 0)) != 0) {
+        body.insert(body.end(), std::begin(buf), std::begin(buf) + len);
+        totalLen += len;
+        if (totalLen == contentLength) {
+            break;
         }
-        resp.parseBody(body);
     }
+    resp.parseBody(body);
     return resp;
 }
 
@@ -84,33 +57,7 @@ HTTPResponse HTTPConnection::head(const std::string &url) {
     std::vector<char> res;
     auto req = constructHeaders(path, "HEAD");
     ::send(socks[host], req.c_str(), req.length(), 0);
-
-    char response;
-    bool gotHeaders = false;
-    std::string receivedHeaders;
-    while (::recv(socks[host], &response, sizeof(response), 0) != 0) {
-        receivedHeaders.push_back(response);
-        if (response == '\r') {
-            if (::recv(socks[host], &response, sizeof(response), 0) != 0) {
-                receivedHeaders.push_back(response);
-                if (response == '\n') {
-                    if (::recv(socks[host], &response, sizeof(response), 0) != 0) {
-                        receivedHeaders.push_back(response);
-                        if (response == '\r') {
-                            if (::recv(socks[host], &response, sizeof(response), 0) != 0) {
-                                receivedHeaders.push_back(response);
-                                if (response == '\n') {
-                                    gotHeaders = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return HTTPResponse{receivedHeaders};
+    return receiveHTTPHeaders(socks[host]);
 }
 
 std::string HTTPConnection::constructHeaders(const std::string &path, const std::string &method) const noexcept {
@@ -121,6 +68,43 @@ std::string HTTPConnection::constructHeaders(const std::string &path, const std:
     }
     ss << "\r\n";
     return ss.str();
+}
+
+HTTPResponse HTTPConnection::receiveHTTPHeaders(int socket) const {
+    char response;
+    std::string receivedHeaders;
+    enum class CharState {
+        PLAIN = 0,
+        R,
+        RN,
+        RNR,
+        RNRN
+    };
+    CharState s = CharState::PLAIN;
+    while (::recv(socket, &response, sizeof(response), 0) != 0) {
+        if (response == '\r') {
+            if (s == CharState::RN) {
+                s = CharState::RNR;
+            } else {
+                s = CharState::R;
+            }
+            // \r字符在接收时直接丢掉
+        } else if (response == '\n') {
+            if (s == CharState::R) {
+                s = CharState::RN;
+            } else if (s == CharState::RNR) {
+                s = CharState::RNRN;
+            } else {
+                s = CharState::PLAIN;
+            }
+            receivedHeaders.push_back(response);
+        } else {
+            s = CharState::PLAIN;
+            receivedHeaders.push_back(response);
+        }
+        if (s == CharState::RNRN) break;
+    }
+    return HTTPResponse{receivedHeaders};
 }
 
 bool HTTPConnection::connect(const std::string &host) {

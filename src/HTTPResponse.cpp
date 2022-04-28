@@ -23,7 +23,6 @@ void HTTPResponse::parse(const std::string &resText) {
             temp >> this->_status;
             temp.get();
             std::getline(temp, this->_statusText);
-            this->_httpVersion.pop_back(); // 去除尾部\r
             parts = ResponseParts::Headers;
             break;
         }
@@ -37,7 +36,7 @@ void HTTPResponse::parse(const std::string &resText) {
                 continue;
             int idx2 = idx + 1;
             while (line[idx2] == ' ') ++idx2; // 去除首部空格
-            this->_headers[line.substr(0, idx)] = line.substr(idx2, line.length() - 1 - idx2); // 去除尾部\r
+            this->_headers[line.substr(0, idx)] = line.substr(idx2); // 去除尾部\r
             break;
         }
         case ResponseParts::Body: {
@@ -67,7 +66,6 @@ void HTTPResponse::parse(const std::vector<char> &data) {
             temp >> this->_status;
             temp.get();
             std::getline(temp, this->_statusText);
-            this->_statusText.pop_back(); // 去除尾部\r
             parts = ResponseParts::Headers;
             break;
         }
@@ -81,7 +79,7 @@ void HTTPResponse::parse(const std::vector<char> &data) {
                 continue;
             int idx2 = idx + 1;
             while (line[idx2] == ' ') ++idx2; // 去除首部空格
-            this->_headers[line.substr(0, idx)] = line.substr(idx2, line.length() - 1 - idx2); // 去除尾部\r
+            this->_headers[line.substr(0, idx)] = line.substr(idx2);
             break;
         }
         case ResponseParts::Body: {

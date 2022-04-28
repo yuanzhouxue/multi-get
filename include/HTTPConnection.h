@@ -32,6 +32,7 @@ class HTTPConnection {
     std::unordered_map<std::string, int> socks;
 
     std::string constructHeaders(const std::string &path, const std::string &method = "GET") const noexcept;
+    HTTPResponse receiveHTTPHeaders(int socket) const;
     bool connect(const std::string &host);
     void initHeaders() noexcept;
 };
