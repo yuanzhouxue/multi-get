@@ -98,7 +98,7 @@ void HTTPResponse::parse(const std::string &resText) {
         }
     }
 }
-```cpp
+```
 
 这里，HTTP的头部暂时使用`std::unordered_map<std::string, std::string>`来存储，但需要注意到响应头中可能包含多个key相同的字段，如`Set-Cookie`等，因此这里后续还需要进行优化。
 
