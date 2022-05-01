@@ -54,7 +54,6 @@ HTTPResponse HTTPConnection::head(const std::string &url) {
         return HTTPResponse{};
     }
 
-    std::vector<char> res;
     auto req = constructHeaders(path, "HEAD");
     ::send(socks[host], req.c_str(), req.length(), 0);
     return receiveHTTPHeaders(socks[host]);
