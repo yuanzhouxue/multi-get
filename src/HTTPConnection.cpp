@@ -5,58 +5,17 @@
 namespace multi_get {
 
 HTTPResponse HTTPConnection::get(const std::string &url) {
-    if (url.substr(0, 7) != "http://") {
-        throw "Only support http !!";
-    }
     auto dashIdx = url.find('/', 7);
     std::string host = url.substr(7, dashIdx - 7);
     std::string path = dashIdx == std::string::npos ? "/" : url.substr(dashIdx);
-    headers["Host"] = host;
-
-    if (socks.find(host) == socks.end() && !connect(host)) {
-        return HTTPResponse{};
-    }
-
-    auto req = constructHeaders(path);
-    ::send(socks[host], req.c_str(), req.length(), 0);
-
-    auto resp = receiveHTTPHeaders(socks[host]);
-    // BUF_SIZE = 1MB
-    constexpr size_t BUF_SIZE = 1024 * 1024;
-    unsigned char buf[BUF_SIZE];
-    int contentLength = std::stoi(resp["Content-Length"]);
-
-    int len = 0;
-    int totalLen = 0;
-    std::vector<char> body;
-    body.reserve(contentLength);
-    while ((len = ::recv(socks[host], buf, BUF_SIZE, 0)) != 0) {
-        body.insert(body.end(), std::begin(buf), std::begin(buf) + len);
-        totalLen += len;
-        if (totalLen == contentLength) {
-            break;
-        }
-    }
-    resp.parseBody(body);
-    return resp;
+    return get(host, path);
 }
 
 HTTPResponse HTTPConnection::head(const std::string &url) {
-    if (url.substr(0, 7) != "http://") {
-        throw "Only support http !!";
-    }
     auto dashIdx = url.find('/', 7);
     std::string host = url.substr(7, dashIdx - 7);
     std::string path = dashIdx == std::string::npos ? "/" : url.substr(dashIdx);
-    headers["Host"] = host;
-
-    if (socks.find(host) == socks.end() && !connect(host)) {
-        return HTTPResponse{};
-    }
-
-    auto req = constructHeaders(path, "HEAD");
-    ::send(socks[host], req.c_str(), req.length(), 0);
-    return receiveHTTPHeaders(socks[host]);
+    return head(host, path);
 }
 
 std::string HTTPConnection::constructHeaders(const std::string &path, const std::string &method) const noexcept {
@@ -69,7 +28,7 @@ std::string HTTPConnection::constructHeaders(const std::string &path, const std:
     return ss.str();
 }
 
-HTTPResponse HTTPConnection::receiveHTTPHeaders(int socket) const {
+HTTPResponse HTTPConnection::receiveHTTPHeaders() const {
     char response;
     std::string receivedHeaders;
     enum class CharState {
@@ -80,7 +39,7 @@ HTTPResponse HTTPConnection::receiveHTTPHeaders(int socket) const {
         RNRN
     };
     CharState s = CharState::PLAIN;
-    while (::recv(socket, &response, sizeof(response), 0) != 0) {
+    while (conn->receive(&response, sizeof(response)) != 0) {
         if (response == '\r') {
             if (s == CharState::RN) {
                 s = CharState::RNR;
@@ -101,33 +60,10 @@ HTTPResponse HTTPConnection::receiveHTTPHeaders(int socket) const {
             s = CharState::PLAIN;
             receivedHeaders.push_back(response);
         }
-        if (s == CharState::RNRN) break;
+        if (s == CharState::RNRN)
+            break;
     }
     return HTTPResponse{receivedHeaders};
-}
-
-bool HTTPConnection::connect(const std::string &host) {
-    if (socks.find(host) != socks.end())
-        return true;
-
-    int sock = ::socket(PF_INET, SOCK_STREAM, 0);
-    auto servIP = ::gethostbyname(host.c_str());
-
-    struct sockaddr_in servAddr;
-    std::memset(&servAddr, 0, sizeof(servAddr));
-    servAddr.sin_family = AF_INET;
-    servAddr.sin_addr.s_addr = ::inet_addr(inet_ntoa(*(struct in_addr *)servIP->h_addr_list[0]));
-    servAddr.sin_port = ::htons(80);
-
-    auto err = ::connect(sock, (struct sockaddr *)&servAddr, sizeof(servAddr));
-    if (err != 0) {
-        // std::cout << "connect error: " << err << std::endl;
-        ::perror("Connection Error: ");
-        // std::cout << "Error no: " << errno << std::endl;
-        return false;
-    }
-    socks[host] = sock;
-    return true;
 }
 
 void HTTPConnection::setHeader(const std::string &key, const std::string &val) {
@@ -140,9 +76,45 @@ void HTTPConnection::initHeaders() noexcept {
     headers.emplace("Accept", "*/*");
 }
 
-HTTPConnection::~HTTPConnection() {
-    for (const auto &[host, sock] : socks)
-        close(sock);
+HTTPResponse HTTPConnection::head(const std::string &host, const std::string &fileUrl) {
+    if (!conn->connected() && !conn->connect(host)) {
+        return HTTPResponse{};
+    }
+
+    headers["Host"] = host;
+    auto req = constructHeaders(fileUrl, "HEAD");
+    conn->send(req.data(), req.length());
+    return receiveHTTPHeaders();
+}
+
+HTTPResponse HTTPConnection::get(const std::string &host, const std::string &fileUrl) {
+    if (!conn->connected() && !conn->connect(host)) {
+        return HTTPResponse{};
+    }
+
+    headers["Host"] = host;
+    auto req = constructHeaders(fileUrl);
+    conn->send(req.data(), req.length());
+
+    auto resp = receiveHTTPHeaders();
+    // BUF_SIZE = 1MB
+    constexpr size_t BUF_SIZE = 1024 * 1024;
+    unsigned char buf[BUF_SIZE];
+    int contentLength = std::stoi(resp["Content-Length"]);
+
+    int len = 0;
+    int totalLen = 0;
+    std::vector<char> body;
+    body.reserve(contentLength);
+    while ((len = conn->receive(buf, BUF_SIZE)) != 0) {
+        body.insert(body.end(), std::begin(buf), std::begin(buf) + len);
+        totalLen += len;
+        if (totalLen == contentLength) {
+            break;
+        }
+    }
+    resp.parseBody(body);
+    return resp;
 }
 
 } // namespace multi_get

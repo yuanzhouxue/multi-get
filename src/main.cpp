@@ -12,7 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "HTTPConnection.h"
+#include "HTTPSConnection.h"
 #include "HTTPResponse.h"
 
 using namespace std;
@@ -22,7 +22,7 @@ namespace multi_get {
 std::mutex m;
 
 void downloadRange(const string &url, size_t beginPos, size_t endPos) {
-    multi_get::HTTPConnection conn{};
+    multi_get::HTTPSConnection conn{};
     std::stringstream ss;
     ss << "bytes=" << beginPos << '-' << endPos;
     conn.setHeader("Range", ss.str());
@@ -51,7 +51,7 @@ int download(const string &url, size_t threadCount = 1) {
     if (threadCount > 32)
         threadCount = 32;
 
-    multi_get::HTTPConnection conn{};
+    multi_get::HTTPSConnection conn{};
     auto res = conn.head(url);
 
     res.displayHeaders();
@@ -114,9 +114,9 @@ int download(const string &url, size_t threadCount = 1) {
 
 int main(int, char **) {
 
-    // string url = "http://mirrors.tuna.tsinghua.edu.cn/ubuntu/pool/main/t/tcpdump/tcpdump_4.99.1.orig.tar.gz";
+    string url = "https://mirrors.tuna.tsinghua.edu.cn/ubuntu/pool/main/t/tcpdump/tcpdump_4.99.1.orig.tar.gz";
     // string url = "http://mirrors.tuna.tsinghua.edu.cn/index.html";
-    string url = "http://localhost/CLion-2020.3.3.tar.gz";
+    // string url = "http://localhost/CLion-2020.3.3.tar.gz";
 
     auto start = std::chrono::system_clock::now();
 

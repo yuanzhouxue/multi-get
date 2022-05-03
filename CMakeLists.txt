@@ -11,9 +11,10 @@ include(CTest)
 enable_testing()
 
 find_package(Threads)
+find_package(OpenSSL REQUIRED)
 
-add_executable(multi-get src/main.cpp src/HTTPResponse.cpp src/HTTPConnection.cpp)
-target_link_libraries(multi-get ${CMAKE_THREAD_LIBS_INIT} stdc++fs)
+add_executable(multi-get src/main.cpp src/HTTPResponse.cpp src/HTTPConnection.cpp src/HTTPSConnection.cpp src/SSLConnection.cpp)
+target_link_libraries(multi-get ${CMAKE_THREAD_LIBS_INIT} stdc++fs OpenSSL::SSL)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
