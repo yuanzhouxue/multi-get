@@ -12,8 +12,12 @@
 #include <unordered_map>
 #include <vector>
 
-#include "HTTPSConnection.h"
 #include "HTTPResponse.h"
+#include "HTTPSConnection.h"
+
+#ifdef _WIN32
+#pragma comment(lib, "ws2_32.lib")
+#endif
 
 using namespace std;
 
@@ -57,13 +61,13 @@ int download(const string &url, size_t threadCount = 1) {
     res.displayHeaders();
 
     if (threadCount > 1 && res["Accept-Ranges"] != string("bytes")) {
-        std::cout << "服务器不支持范围请求，即将使用单线程下载！" << std::endl;
+        std::cout << "The server does not support range request, using single thread to download!" << std::endl;
         threadCount = 1;
     }
 
     int fileSize = std::stoi(res["Content-Length"]);
 
-    // 必须注意到Ranges两端都是闭区间
+    /* 必须注意到Ranges两端都是闭区间 */
     int perThreadSize = fileSize / threadCount;
     int remain = fileSize % threadCount;
     int idx = -1;
@@ -114,9 +118,35 @@ int download(const string &url, size_t threadCount = 1) {
 
 int main(int, char **) {
 
+#ifdef _WIN32
+    WORD sockVersion = MAKEWORD(2, 2);
+    WSADATA data;
+    if (WSAStartup(sockVersion, &data) != 0) {
+        return 1;
+    }
+#endif //_WIN32
+
     string url = "https://mirrors.tuna.tsinghua.edu.cn/ubuntu/pool/main/t/tcpdump/tcpdump_4.99.1.orig.tar.gz";
     // string url = "http://mirrors.tuna.tsinghua.edu.cn/index.html";
     // string url = "http://localhost/CLion-2020.3.3.tar.gz";
+
+    // string url = "https://github.com/yuanzhouxue/auto-pppoe/archive/refs/heads/master.zip"; // 302 Found  ==> Location:
+    // string url = "https://codeload.github.com/yuanzhouxue/auto-pppoe/zip/refs/heads/master";
+    /*
+    HTTP/1.1 200 OK
+    X-GitHub-Request-Id: 2FF5:5B13:1AB45:A9564:6270992C
+    Date: Tue, 03 May 2022 02:53:32 GMT
+    X-XSS-Protection: 1; mode=block
+    X-Frame-Options: deny
+    Vary: Authorization,Accept-Encoding,Origin
+    X-Content-Type-Options: nosniff
+    content-disposition: attachment; filename=auto-pppoe-master.zip
+    Strict-Transport-Security: max-age=31536000
+    Access-Control-Allow-Origin: https://render.githubusercontent.com
+    Content-Type: application/zip
+    ETag: "0fe764ba8f5ccb28872402bdb31e6b08c34617fe2a0b031b96ae105b11f0a648"
+    Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox
+    */
 
     auto start = std::chrono::system_clock::now();
 
@@ -125,15 +155,19 @@ int main(int, char **) {
     auto end = std::chrono::system_clock::now();
     auto duration = chrono::duration_cast<chrono::microseconds>(end - start);
     auto secondsUsed = double(duration.count()) * chrono::microseconds::period::num / chrono::microseconds::period::den;
-    cout << "花费了" << secondsUsed << "s" << endl;
+    cout << "Time spent: " << secondsUsed << "s" << endl;
 
     auto KBps = fileSize / secondsUsed / 1024.0;
-    if (KBps < 1024)
-        cout << "平均下载速度：" << KBps << " KB/s" << endl;
-    else if (KBps < 1024 * 1024)
-        cout << "平均下载速度：" << KBps / 1024.0 << " MB/s" << endl;
-    else if (KBps < 1024 * 1024 * 1024)
-        cout << "平均下载速度：" << KBps / 1024.0 / 1024.0 << " GB/s" << endl;
+    cout << "Average speed: ";
+    if (KBps < 1024) {
+        cout << KBps << " KB/s" << endl;
+    } else if (KBps < 1024 * 1024) {
+        cout << KBps / 1024.0 << " MB/s" << endl;
+    } else if (KBps < 1024 * 1024 * 1024) {
+        cout << KBps / 1024.0 / 1024.0 << " GB/s" << endl;
+    } else {
+        cout << KBps / 1024.0 / 1024.0 / 1024.0 << " TB/s" << endl;
+    }
 
     // // auto res = conn.get(url);
     // auto res = conn.head(url);
@@ -158,4 +192,10 @@ int main(int, char **) {
 
     // string resBody{res.body().begin(), res.body().end()};
     // cout << resBody << endl;
+
+#ifdef _WIN32
+    WSACleanup();
+#endif // _WIN32
+
+    return 0;
 }

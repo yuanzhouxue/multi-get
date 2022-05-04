@@ -13,8 +13,14 @@ enable_testing()
 find_package(Threads)
 find_package(OpenSSL REQUIRED)
 
-add_executable(multi-get src/main.cpp src/HTTPResponse.cpp src/HTTPConnection.cpp src/HTTPSConnection.cpp src/SSLConnection.cpp)
-target_link_libraries(multi-get ${CMAKE_THREAD_LIBS_INIT} stdc++fs OpenSSL::SSL)
+aux_source_directory(src srcs)
+
+add_executable(multi-get ${srcs})
+target_link_libraries(multi-get ${CMAKE_THREAD_LIBS_INIT} OpenSSL::SSL)
+# Clang和GCC需要额外链接stdc++fs，而MSVC不需要
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_link_libraries(multi-get stdc++fs)
+endif()
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})

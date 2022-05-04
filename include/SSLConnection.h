@@ -14,9 +14,9 @@ class SSLConnection : public Connection {
     virtual std::pair<std::string, uint16_t> getHostAndPort(const std::string &host) override;
 
   protected:
-    ssize_t send(const void *__buf, size_t __n) const override;
+    ssize_t send(const char *__buf, size_t __n) const override;
 
-    ssize_t receive(void *__buf, size_t __n) const override;
+    ssize_t receive(char *__buf, size_t __n) const override;
 
     bool connect(const std::string &host) override;
 

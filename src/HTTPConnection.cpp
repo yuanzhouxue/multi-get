@@ -99,14 +99,14 @@ HTTPResponse HTTPConnection::get(const std::string &host, const std::string &fil
     auto resp = receiveHTTPHeaders();
     // BUF_SIZE = 1MB
     constexpr size_t BUF_SIZE = 1024 * 1024;
-    unsigned char buf[BUF_SIZE];
+    std::vector<char> buf(BUF_SIZE);
     int contentLength = std::stoi(resp["Content-Length"]);
 
     int len = 0;
     int totalLen = 0;
     std::vector<char> body;
     body.reserve(contentLength);
-    while ((len = conn->receive(buf, BUF_SIZE)) != 0) {
+    while ((len = conn->receive(buf.data(), BUF_SIZE)) != 0) {
         body.insert(body.end(), std::begin(buf), std::begin(buf) + len);
         totalLen += len;
         if (totalLen == contentLength) {

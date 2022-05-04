@@ -2,27 +2,41 @@
 #define CONNECTION_H
 
 #include <string>
-
-#include <arpa/inet.h>
 #include <cstring>
+#include <csignal>
+#include <cstdlib>
+
+
+
+#ifdef _WIN32
+
+#include <winsock2.h>
+using ssize_t = SSIZE_T;
+inline void close(SOCKET sock) {
+    ::closesocket(sock);
+}
+
+#elif __linux__
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+
+using SOCKET = int;
+
+#else
+    #error "Unsupported platform"
+#endif
+
+
 
 namespace multi_get {
 
 class Connection {
   protected:
-    const static uint16_t DEFAULT_PORT = 80;
-    int sock{-1};
+    SOCKET sock;
     bool _connected{false};
-
-    std::string host;
-    uint16_t port;
 
     struct sockaddr_in constructSockaddr(const std::string &host, uint16_t port) {
         auto servIP = ::gethostbyname(host.c_str());
@@ -69,8 +83,8 @@ class Connection {
         return true;
     }
 
-    virtual ssize_t send(const void *__buf, size_t __n) const = 0;
-    virtual ssize_t receive(void *__buf, size_t __n) const = 0;
+    virtual ssize_t send(const char *__buf, size_t __n) const = 0;
+    virtual ssize_t receive(char *__buf, size_t __n) const = 0;
 
     Connection() = default;
     // Connection(const std::string &host, uint16_t port) : host(host), port(port){};
