@@ -7,7 +7,7 @@
 - [x] 多线程下载
 - [ ] 处理HTTP重定向状态码
 - [x] 支持Linux平台
-- [ ] 支持Windows平台
+- [x] 支持Windows平台
 
 ## 文档
 
