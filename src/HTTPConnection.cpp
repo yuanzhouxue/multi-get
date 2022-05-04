@@ -1,4 +1,5 @@
 #include "HTTPConnection.h"
+#include "version.h"
 #include <cstdio>
 #include <cstring>
 
@@ -71,8 +72,8 @@ void HTTPConnection::setHeader(const std::string &key, const std::string &val) {
 }
 
 void HTTPConnection::initHeaders() noexcept {
-    headers.emplace("Connection", "Keep-Alive");
-    headers.emplace("User-Agent", "multi-get/0.1.0");
+    headers.emplace("Connection", "keep-alive");
+    headers.emplace("User-Agent", USER_AGENT);
     headers.emplace("Accept", "*/*");
 }
 

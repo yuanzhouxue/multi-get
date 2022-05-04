@@ -1,11 +1,14 @@
 cmake_minimum_required(VERSION 3.10.0)
 
 project(multi-get VERSION 0.1.0)
+configure_file(version.h.in version.h)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CXX_STANDARD_REQUIRED ON)
 
 
 include_directories(include)
+include_directories(${PROJECT_BINARY_DIR})
 
 include(CTest)
 enable_testing()
