@@ -116,7 +116,14 @@ int download(const string &url, size_t threadCount = 1) {
 
 } // namespace multi_get
 
-int main(int, char **) {
+void showUsage() {
+    cout << "Usage: multi-get [-n N] <url>" << endl;
+    cout << "  -n N: download using N threads, default is 4" << endl;
+    cout << "  -h, --help: show this help" << endl;
+}
+
+
+int main(int argc, char ** argv) {
 
 #ifdef _WIN32
     WORD sockVersion = MAKEWORD(2, 2);
@@ -126,7 +133,32 @@ int main(int, char **) {
     }
 #endif //_WIN32
 
-    string url = "https://mirrors.tuna.tsinghua.edu.cn/ubuntu/pool/main/t/tcpdump/tcpdump_4.99.1.orig.tar.gz";
+    if (argc == 2 && (string(argv[1]) == "-h" || string(argv[1]) == "--help")) {
+        showUsage();
+        return 0;
+    }
+
+    std::string url = "https://mirrors.tuna.tsinghua.edu.cn/ubuntu/pool/main/t/tcpdump/tcpdump_4.99.1.orig.tar.gz";
+    int threadCount = 4;
+
+    if (argc == 4 && string(argv[1]) == "-n") {
+        threadCount = stoi(argv[2]);
+        if (threadCount < 1) {
+            cout << "Thread count must be greater than 0" << endl;
+            return 1;
+        }
+        url = argv[3];
+    } else if (argc == 2) {
+        url = argv[1];
+    } else if (argc == 1) {
+        // cin >> url;
+    } else {
+        showUsage();
+        return 1;
+    }
+
+    // string url = "https://mirrors.tuna.tsinghua.edu.cn/ubuntu/pool/main/t/tcpdump/tcpdump_4.99.1.orig.tar.gz";
+    // string url = "http://www.baidu.com";
     // string url = "http://mirrors.tuna.tsinghua.edu.cn/index.html";
     // string url = "http://localhost/CLion-2020.3.3.tar.gz";
 
@@ -150,7 +182,7 @@ int main(int, char **) {
 
     auto start = std::chrono::system_clock::now();
 
-    auto fileSize = multi_get::download(url, 4);
+    auto fileSize = multi_get::download(url, threadCount);
 
     auto end = std::chrono::system_clock::now();
     auto duration = chrono::duration_cast<chrono::microseconds>(end - start);

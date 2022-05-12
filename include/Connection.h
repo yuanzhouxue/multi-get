@@ -11,6 +11,7 @@
 #ifdef _WIN32
 
 #include <winsock2.h>
+#include <WS2tcpip.h>
 using ssize_t = SSIZE_T;
 inline void close(SOCKET sock) {
     ::closesocket(sock);
@@ -38,14 +39,27 @@ class Connection {
     SOCKET sock;
     bool _connected{false};
 
-    struct sockaddr_in constructSockaddr(const std::string &host, uint16_t port) {
-        auto servIP = ::gethostbyname(host.c_str());
-        struct sockaddr_in servAddr;
-        std::memset(&servAddr, 0, sizeof(servAddr));
-        servAddr.sin_family = AF_INET;
-        servAddr.sin_addr.s_addr = ::inet_addr(inet_ntoa(*(struct in_addr *)servIP->h_addr_list[0]));
-        servAddr.sin_port = ::htons(port);
-        return servAddr;
+    SOCKET openClientFd(const std::string& host, uint16_t port) {
+        SOCKET clientFd;
+        addrinfo hints, *listp, *p;
+        std::memset(&hints, 0, sizeof(hints));
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_flags = AI_NUMERICSERV | AI_ADDRCONFIG;
+        std::string portStr = std::to_string(port);
+        ::getaddrinfo(host.c_str(), portStr.c_str(), &hints, &listp);
+
+        for (p = listp; p; p = p->ai_next) {
+            if ((clientFd = ::socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) {
+                continue;
+            }
+            if (::connect(clientFd, p->ai_addr, p->ai_addrlen) != -1) {
+                break;
+            }
+            ::close(clientFd);
+        }
+        ::freeaddrinfo(listp);
+        if (!p) return -1;
+        else return clientFd;
     }
 
     virtual std::pair<std::string, uint16_t> getHostAndPort(const std::string& host) {
@@ -70,11 +84,9 @@ class Connection {
 
         
         const auto& [hostAddr, hostPort] = getHostAndPort(host);
-        sock = ::socket(PF_INET, SOCK_STREAM, 0);
-        auto servAddr = constructSockaddr(hostAddr, hostPort);
 
-        auto err = ::connect(sock, (struct sockaddr *)&servAddr, sizeof(servAddr));
-        if (err != 0) {
+        sock = openClientFd(hostAddr, hostPort);
+        if (sock == -1) {
             ::perror("Connection Error: ");
             _connected = false;
             return false;

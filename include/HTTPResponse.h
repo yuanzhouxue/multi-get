@@ -57,6 +57,9 @@ class HTTPResponse {
         return "";
     }
 
+    bool contains(const std::string& key) const noexcept {
+        return _headers.find(key) != _headers.end();
+    }
     const char *data() const noexcept {
         return _body.data();
     }
