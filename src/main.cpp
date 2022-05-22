@@ -35,7 +35,7 @@ size_t downloadRange(const string &url, ssize_t beginPos, ssize_t endPos) {
         filename.append(ss.str());
     }
     auto res = conn.get(url);
-    ofstream out(filename);
+    ofstream out(filename, ios::binary);
     out.write(res.body().data(), res.body().size());
     out.close();
 

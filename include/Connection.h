@@ -36,7 +36,7 @@ namespace multi_get {
 
 class Connection {
   protected:
-    SOCKET sock{-1};
+    SOCKET sock{};
     bool _connected{false};
     std::string hostname;
     uint16_t port{0};
@@ -92,7 +92,7 @@ class Connection {
     virtual ssize_t send(const char *_buf, size_t _n, int _flag = 0) const = 0;
     virtual ssize_t receive(char *_buf, size_t _n, int _flag = 0) const = 0;
 
-    void setoption(int _level, int _optname, const void *_optval, socklen_t _optlen) noexcept {
+    void setoption(int _level, int _optname, const char *_optval, socklen_t _optlen) noexcept {
         ::setsockopt(this->sock, _level, _optname, _optval, _optlen);
     }
 
