@@ -5,7 +5,7 @@
 - [x] HTTP下载
 - [x] HTTPS下载（基于OpenSSL）
 - [x] 多线程下载
-- [ ] 处理HTTP重定向状态码
+- [x] 处理HTTP重定向状态码
 - [x] 支持Linux平台
 - [x] 支持Windows平台
 

@@ -1,19 +1,14 @@
-#include <cerrno>
 #include <chrono>
 #include <cstddef>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <memory>
 #include <mutex>
-#include <sstream>
 #include <thread>
-#include <unordered_map>
 #include <vector>
 
-#include "HTTPResponse.h"
-#include "HTTPSConnection.h"
+#include "HTTPConnection.h"
 
 #ifdef _WIN32
 #pragma comment(lib, "ws2_32.lib")
@@ -25,57 +20,57 @@ namespace multi_get {
 
 std::mutex m;
 
-void downloadRange(const string &url, size_t beginPos, size_t endPos) {
-    multi_get::HTTPSConnection conn{};
-    std::stringstream ss;
-    ss << "bytes=" << beginPos << '-' << endPos;
-    conn.setHeader("Range", ss.str());
-    auto res = conn.get(url);
-    // res.displayHeaders();
-
+size_t downloadRange(const string &url, ssize_t beginPos, ssize_t endPos) {
+    multi_get::HTTPConnection conn{};
     string filename = url.substr(url.find_last_of('/') + 1);
     if (filename.empty())
         filename = "multi-get.downloaded";
 
-    ss.str("");
-    ss << '.' << beginPos << '-' << endPos;
-    filename.append(ss.str());
-
+    if (beginPos >= 0 && endPos >= beginPos) {
+        std::stringstream ss;
+        ss << "bytes=" << beginPos << '-' << endPos;
+        conn.setHeader("Range", ss.str());
+        ss.str("");
+        ss << '.' << beginPos << '-' << endPos;
+        filename.append(ss.str());
+    }
+    auto res = conn.get(url);
     ofstream out(filename);
     out.write(res.body().data(), res.body().size());
     out.close();
 
     lock_guard<std::mutex> locker(m);
     std::cout << "Thread " << this_thread::get_id() << " downloaded " << res.contentLength() << " bytes" << std::endl;
+    return res.contentLength();
 }
 
-int download(const string &url, size_t threadCount = 1) {
+size_t download(const string &url, size_t threadCount = 1) {
     if (threadCount < 1)
         threadCount = 1;
     if (threadCount > 32)
         threadCount = 32;
 
-    multi_get::HTTPSConnection conn{};
+    multi_get::HTTPConnection conn{};
     auto res = conn.head(url);
 
-    res.displayHeaders();
+//    res.displayHeaders();
 
-    if (threadCount > 1 && res["Accept-Ranges"] != string("bytes")) {
+    if (!res.contains("Content-Length") || (threadCount > 1 && res["Accept-Ranges"] != string("bytes"))) {
         std::cout << "The server does not support range request, using single thread to download!" << std::endl;
-        threadCount = 1;
+        return downloadRange(url, -1, -1);
     }
 
-    int fileSize = std::stoi(res["Content-Length"]);
+    size_t fileSize = std::stoi(res["Content-Length"]);
 
     /* 必须注意到Ranges两端都是闭区间 */
-    int perThreadSize = fileSize / threadCount;
-    int remain = fileSize % threadCount;
-    int idx = -1;
+    auto perThreadSize = fileSize / threadCount;
+    auto remain = fileSize % threadCount;
+    size_t idx = -1;
 
     vector<std::thread> threads(threadCount);
     vector<pair<size_t, size_t>> ranges;
     for (int i = 0; i < threadCount; ++i) {
-        int range = perThreadSize;
+        auto range = perThreadSize;
         if (remain-- > 0)
             ++range;
         // cout << "Thread ranges: " << idx + 1<< "-" << idx + range << endl;
@@ -100,7 +95,7 @@ int download(const string &url, size_t threadCount = 1) {
     ss << filename << '.' << ranges[0].first << '-' << ranges[0].second;
     output.open(ss.str(), std::ios::binary | std::ios::out | std::ios::app);
     for (int i = 1; i < ranges.size(); ++i) {
-        stringstream ss;
+        ss.str("");
         ss << filename << '.' << ranges[i].first << '-' << ranges[i].second;
         ifstream input;
         input.open(ss.str(), std::ios::binary | std::ios::in);
@@ -138,7 +133,7 @@ int main(int argc, char ** argv) {
         return 0;
     }
 
-    std::string url = "https://mirrors.tuna.tsinghua.edu.cn/ubuntu/pool/main/t/tcpdump/tcpdump_4.99.1.orig.tar.gz";
+    std::string url = "https://github.com/yuanzhouxue/auto-pppoe/archive/refs/heads/master.zip";
     int threadCount = 4;
 
     if (argc == 4 && string(argv[1]) == "-n") {

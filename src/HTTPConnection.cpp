@@ -1,23 +1,8 @@
 #include "HTTPConnection.h"
 #include "version.h"
-#include <cstdio>
 #include <cstring>
 
 namespace multi_get {
-
-HTTPResponse HTTPConnection::get(const std::string &url) {
-    auto dashIdx = url.find('/', 7);
-    std::string host = url.substr(7, dashIdx - 7);
-    std::string path = dashIdx == std::string::npos ? "/" : url.substr(dashIdx);
-    return get(host, path);
-}
-
-HTTPResponse HTTPConnection::head(const std::string &url) {
-    auto dashIdx = url.find('/', 7);
-    std::string host = url.substr(7, dashIdx - 7);
-    std::string path = dashIdx == std::string::npos ? "/" : url.substr(dashIdx);
-    return head(host, path);
-}
 
 std::string HTTPConnection::constructHeaders(const std::string &path, const std::string &method) const noexcept {
     std::stringstream ss;
@@ -29,7 +14,7 @@ std::string HTTPConnection::constructHeaders(const std::string &path, const std:
     return ss.str();
 }
 
-HTTPResponse HTTPConnection::receiveHTTPHeaders() const {
+HTTPResponse HTTPConnection::receiveHTTPHeaders(const std::shared_ptr<Connection> &conn) {
     char response;
     std::string receivedHeaders;
     enum class CharState {
@@ -77,41 +62,118 @@ void HTTPConnection::initHeaders() noexcept {
     headers.emplace("Accept", "*/*");
 }
 
-HTTPResponse HTTPConnection::head(const std::string &host, const std::string &fileUrl) {
-    if (!conn->connected() && !conn->connect(host)) {
+HTTPResponse HTTPConnection::head(const std::string &url) {
+    std::cout << "Heading url: " << url << std::endl;
+
+    auto conn = PoolGuard(url);
+
+    if (!conn->connected() && !conn->connect()) {
         return HTTPResponse{};
     }
-
-    headers["Host"] = host;
-    auto req = constructHeaders(fileUrl, "HEAD");
+    auto [_, hostname, _port] = formatHost(url);
+    headers["Host"] = hostname;
+    auto req = constructHeaders(url, "HEAD");
     conn->send(req.data(), req.length());
-    return receiveHTTPHeaders();
+    auto res = receiveHTTPHeaders(conn);
+    if (res.status() == 301 || res.status() == 302) {
+        conn.release();
+        res = head(res["Location"]);
+    }
+    return res;
 }
 
-HTTPResponse HTTPConnection::get(const std::string &host, const std::string &fileUrl) {
-    if (!conn->connected() && !conn->connect(host)) {
+HTTPResponse HTTPConnection::get(const std::string &url) {
+    std::cerr << "Getting url: " << url << std::endl;
+    auto conn = PoolGuard(url);
+
+    if (!conn->connected() && !conn->connect()) {
         return HTTPResponse{};
     }
 
-    headers["Host"] = host;
-    auto req = constructHeaders(fileUrl);
+    auto [_, hostname, _port] = formatHost(url);
+    headers["Host"] = hostname;
+    auto req = constructHeaders(url);
     conn->send(req.data(), req.length());
 
-    auto resp = receiveHTTPHeaders();
+    auto resp = receiveHTTPHeaders(conn);
+//    resp.displayHeaders();
+    if (resp.status() == 301 || resp.status() == 302) {
+        return get(resp["Location"]);
+    }
     // BUF_SIZE = 1MB
     constexpr size_t BUF_SIZE = 1024 * 1024;
     std::vector<char> buf(BUF_SIZE);
-    int contentLength = std::stoi(resp["Content-Length"]);
-
-    int len = 0;
-    int totalLen = 0;
     std::vector<char> body;
-    body.reserve(contentLength);
-    while ((len = conn->receive(buf.data(), BUF_SIZE)) != 0) {
-        body.insert(body.end(), std::begin(buf), std::begin(buf) + len);
-        totalLen += len;
-        if (totalLen == contentLength) {
-            break;
+    if (resp.contains("Content-Length")) {
+        int contentLength = std::stoi(resp["Content-Length"]);
+        ssize_t len = 0;
+        size_t totalLen = 0;
+        body.reserve(contentLength);
+        while ((len = conn->receive(buf.data(), buf.size())) != 0) {
+            body.insert(body.end(), std::begin(buf), std::begin(buf) + len);
+            totalLen += len;
+            if (totalLen == contentLength) {
+                break;
+            }
+        }
+    } else {
+        // 响应头中没有Content-Length字段，则默认采用chunk方式传输(Github)
+        char response;
+        size_t chunkLen = 0;
+
+        ssize_t len = 0;
+        while (true) {
+            chunkLen = 0;
+            while (conn->receive(&response, 1) != 0) {
+                if (response == '\r') {
+                    conn->receive(&response, 1);
+                    break;
+                } else {
+                    if (response >= '0' && response <= '9') chunkLen = chunkLen * 16 + response - '0';
+                    else if (tolower(response) >= 'a' && tolower(response) <= 'f') {
+                        chunkLen = chunkLen * 16 + 10 + tolower(response) - 'a';
+                    }
+                }
+            }
+            if (chunkLen == 0) break;
+
+
+            if (buf.size() < chunkLen) {
+                try {
+                    buf.resize(chunkLen);
+                } catch (std::exception& e) {
+                    std::cerr << "Failed to alloc memory, download failed." << std::endl;
+                    std::cerr << e.what() << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+            }
+
+            len = conn->receive(buf.data(), chunkLen);
+            if (len == -1) {
+                if (errno == EWOULDBLOCK || errno == EAGAIN) {
+                    //                    std::cerr << "recv timeout ...\n";
+                    break;
+                } else if (errno == EINTR) {
+                    std::cerr << "interrupt by signal..." << std::endl;
+                    continue;
+                } else if (errno == ENOENT) {
+                    std::cerr << "recv RST segement..." << std::endl;
+                    break;
+                } else {
+                    std::cerr << "unknown error!" << std::endl;
+                    exit(1);
+                }
+            } else if (len == 0) {
+                std::cerr << "peer closed..." << std::endl;
+                break;
+            } else {
+                body.insert(body.end(), std::begin(buf), std::begin(buf) + len);
+//                if (len != buf.size())
+//                    break;
+            }
+//            取出\r\n
+            conn->receive(&response, 1);
+            conn->receive(&response, 1);
         }
     }
     resp.parseBody(body);

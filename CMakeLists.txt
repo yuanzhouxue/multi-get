@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10.0)
 
-project(multi-get VERSION 0.1.0)
+project(multi-get VERSION 0.1.1)
 configure_file(version.h.in version.h)
 
 set(CMAKE_CXX_STANDARD 20)

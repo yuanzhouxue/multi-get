@@ -14,7 +14,6 @@ using Headers = std::unordered_map<std::string, std::string>;
 class HTTPResponse {
   private:
     Headers _headers;
-    size_t _contentLength{0};
     enum class ResponseParts {
         StartLine = 0,
         Headers,
@@ -48,7 +47,6 @@ class HTTPResponse {
 
     void parseBody(std::vector<char> &b) {
         _body = std::move(b);
-        _contentLength = _body.size();
     }
 
     std::string operator[](const std::string &key) const noexcept {
@@ -64,7 +62,7 @@ class HTTPResponse {
         return _body.data();
     }
 
-    const auto contentLength() const noexcept {
+    auto contentLength() const noexcept {
         return _body.size();
     }
 

@@ -31,7 +31,7 @@ void HTTPResponse::parse(const std::string &resText) {
                 parts = ResponseParts::Body;
                 break;
             }
-            auto idx = line.find(":");
+            auto idx = line.find(':');
             if (idx == std::string::npos)
                 continue;
             int idx2 = idx + 1;
@@ -44,8 +44,6 @@ void HTTPResponse::parse(const std::string &resText) {
             this->_body.push_back('\n');
             break;
         }
-        default:
-            break;
         }
     }
 }
@@ -74,16 +72,15 @@ void HTTPResponse::parse(const std::vector<char> &data) {
                 parts = ResponseParts::Body;
                 break;
             }
-            auto idx = line.find(":");
+            auto idx = line.find(':');
             if (idx == std::string::npos)
                 continue;
-            int idx2 = idx + 1;
+            auto idx2 = idx + 1;
             while (line[idx2] == ' ') ++idx2; // 去除首部空格
             this->_headers[line.substr(0, idx)] = line.substr(idx2);
             break;
         }
         case ResponseParts::Body: {
-            this->_contentLength = data.size() - pos;
             parsed = true;
             break;
         }
