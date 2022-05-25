@@ -20,8 +20,11 @@ namespace multi_get {
 
 std::mutex m;
 
-size_t downloadRange(const string &url, ssize_t beginPos, ssize_t endPos) {
+size_t downloadRange(const string &url, ssize_t beginPos, ssize_t endPos, const std::string &proxy = "") {
     multi_get::HTTPConnection conn{};
+    if (!proxy.empty())
+        conn.setProxy(proxy);
+
     string filename = url.substr(url.find_last_of('/') + 1);
     if (filename.empty())
         filename = "multi-get.downloaded";
@@ -41,31 +44,37 @@ size_t downloadRange(const string &url, ssize_t beginPos, ssize_t endPos) {
 
     lock_guard<std::mutex> locker(m);
     std::cout << "Thread " << this_thread::get_id() << " downloaded " << res.contentLength() << " bytes" << std::endl;
+//    cout << beginPos << " " << endPos << endl;
     return res.contentLength();
 }
 
-size_t download(const string &url, size_t threadCount = 1) {
+size_t download(const string &url, size_t threadCount = 1, const std::string &proxy = "") {
     if (threadCount < 1)
         threadCount = 1;
     if (threadCount > 32)
         threadCount = 32;
 
+    cout << "Downloading using " << threadCount << " threads..." << endl;
+    auto start = std::chrono::system_clock::now();
+
     multi_get::HTTPConnection conn{};
+    if (!proxy.empty())
+        conn.setProxy(proxy);
     auto res = conn.head(url);
 
-//    res.displayHeaders();
+    //    res.displayHeaders();
 
     if (!res.contains("Content-Length") || (threadCount > 1 && res["Accept-Ranges"] != string("bytes"))) {
         std::cout << "The server does not support range request, using single thread to download!" << std::endl;
         return downloadRange(url, -1, -1);
     }
 
-    size_t fileSize = std::stoi(res["Content-Length"]);
+    ssize_t fileSize = std::stoi(res["Content-Length"]);
 
     /* 必须注意到Ranges两端都是闭区间 */
-    auto perThreadSize = fileSize / threadCount;
-    auto remain = fileSize % threadCount;
-    size_t idx = -1;
+    ssize_t perThreadSize = fileSize / threadCount;
+    ssize_t remain = fileSize % threadCount;
+    ssize_t idx = -1;
 
     vector<std::thread> threads(threadCount);
     vector<pair<size_t, size_t>> ranges;
@@ -75,7 +84,7 @@ size_t download(const string &url, size_t threadCount = 1) {
             ++range;
         // cout << "Thread ranges: " << idx + 1<< "-" << idx + range << endl;
         ranges.emplace_back(idx + 1, idx + range);
-        threads[i] = std::thread{downloadRange, url, idx + 1, idx + range};
+        threads[i] = std::thread{downloadRange, url, idx + 1, idx + range, proxy};
         idx += range;
     }
 
@@ -93,7 +102,8 @@ size_t download(const string &url, size_t threadCount = 1) {
     ofstream output;
     stringstream ss;
     ss << filename << '.' << ranges[0].first << '-' << ranges[0].second;
-    output.open(ss.str(), std::ios::binary | std::ios::out | std::ios::app);
+    string tempName = ss.str();
+    output.open(tempName, std::ios::binary | std::ios::out | std::ios::app);
     for (int i = 1; i < ranges.size(); ++i) {
         ss.str("");
         ss << filename << '.' << ranges[i].first << '-' << ranges[i].second;
@@ -105,85 +115,12 @@ size_t download(const string &url, size_t threadCount = 1) {
     }
     output.close();
     // just need rename
-    filesystem::rename(ss.str(), filename);
-    return fileSize;
-}
-
-} // namespace multi_get
-
-void showUsage() {
-    cout << "Usage: multi-get [-n N] <url>" << endl;
-    cout << "  -n N: download using N threads, default is 4" << endl;
-    cout << "  -h, --help: show this help" << endl;
-}
-
-
-int main(int argc, char ** argv) {
-
-#ifdef _WIN32
-    WORD sockVersion = MAKEWORD(2, 2);
-    WSADATA data;
-    if (WSAStartup(sockVersion, &data) != 0) {
-        return 1;
-    }
-#endif //_WIN32
-
-    if (argc == 2 && (string(argv[1]) == "-h" || string(argv[1]) == "--help")) {
-        showUsage();
-        return 0;
-    }
-
-    std::string url = "https://github.com/yuanzhouxue/auto-pppoe/archive/refs/heads/master.zip";
-    int threadCount = 4;
-
-    if (argc == 4 && string(argv[1]) == "-n") {
-        threadCount = stoi(argv[2]);
-        if (threadCount < 1) {
-            cout << "Thread count must be greater than 0" << endl;
-            return 1;
-        }
-        url = argv[3];
-    } else if (argc == 2) {
-        url = argv[1];
-    } else if (argc == 1) {
-        // cin >> url;
-    } else {
-        showUsage();
-        return 1;
-    }
-
-    // string url = "https://mirrors.tuna.tsinghua.edu.cn/ubuntu/pool/main/t/tcpdump/tcpdump_4.99.1.orig.tar.gz";
-    // string url = "http://www.baidu.com";
-    // string url = "http://mirrors.tuna.tsinghua.edu.cn/index.html";
-    // string url = "http://localhost/CLion-2020.3.3.tar.gz";
-
-    // string url = "https://github.com/yuanzhouxue/auto-pppoe/archive/refs/heads/master.zip"; // 302 Found  ==> Location:
-    // string url = "https://codeload.github.com/yuanzhouxue/auto-pppoe/zip/refs/heads/master";
-    /*
-    HTTP/1.1 200 OK
-    X-GitHub-Request-Id: 2FF5:5B13:1AB45:A9564:6270992C
-    Date: Tue, 03 May 2022 02:53:32 GMT
-    X-XSS-Protection: 1; mode=block
-    X-Frame-Options: deny
-    Vary: Authorization,Accept-Encoding,Origin
-    X-Content-Type-Options: nosniff
-    content-disposition: attachment; filename=auto-pppoe-master.zip
-    Strict-Transport-Security: max-age=31536000
-    Access-Control-Allow-Origin: https://render.githubusercontent.com
-    Content-Type: application/zip
-    ETag: "0fe764ba8f5ccb28872402bdb31e6b08c34617fe2a0b031b96ae105b11f0a648"
-    Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox
-    */
-
-    auto start = std::chrono::system_clock::now();
-
-    auto fileSize = multi_get::download(url, threadCount);
+    filesystem::rename(tempName, filename);
 
     auto end = std::chrono::system_clock::now();
     auto duration = chrono::duration_cast<chrono::microseconds>(end - start);
     auto secondsUsed = double(duration.count()) * chrono::microseconds::period::num / chrono::microseconds::period::den;
     cout << "Time spent: " << secondsUsed << "s" << endl;
-
     auto KBps = fileSize / secondsUsed / 1024.0;
     cout << "Average speed: ";
     if (KBps < 1024) {
@@ -196,29 +133,119 @@ int main(int argc, char ** argv) {
         cout << KBps / 1024.0 / 1024.0 / 1024.0 << " TB/s" << endl;
     }
 
-    // // auto res = conn.get(url);
-    // auto res = conn.head(url);
+    return fileSize;
+}
 
-    // res.displayHeaders();
+} // namespace multi_get
 
-    // // cout << res.httpVersion() << endl;
-    // // cout << res.status() << endl;
-    // // cout << res.statusText() << endl;
-    // cout << "Body length: " << res.body().size() << endl;
-    // cout << res.contentLength() << endl;
+void showUsage() {
+    cout << "Usage: multi-get [-n N] [-x proxy] <url>" << endl;
+    cout << "  -n N:        download using N threads, default is 4" << endl;
+    cout << "  -x proxy:    download using proxy, only support socks5 proxy now." << endl;
+    cout << "  -h:          show this help" << endl;
+    cout << "example:" << endl;
+    cout << "multi-get https://example.com" << endl;
+    cout << "multi-get https://example.com -n 16" << endl;
+    cout << "multi-get https://example.com -n 16 -x socks5://localhost:1080" << endl;
+}
 
-    // string filename = url.substr(url.find_last_of('/') + 1);
-    // if (filename.empty()) filename = "multi-get.downloaded";
+class CmdParser {
+    unordered_map<string, string> keywords;
+    vector<string> positional;
+    string executableName;
 
-    // // cout << filename << endl;
-    // ofstream out(filename);
-    // out.write(res.body().data(), res.body().size());
-    // out.close();
+  public:
+    void clear() {
+        positional.clear();
+        keywords.clear();
+        executableName.clear();
+    }
 
-    // cout << res.contentLength() << endl;
+    CmdParser(int argc, const char **argv) {
+        clear();
+        if (argc >= 1) {
+            executableName = string(argv[0]);
+            for (int i = 1; i < argc;) {
+                if (argv[i][0] == '-') {
+                    if (i >= argc || argv[i + 1][0] == '-') {
+                        keywords.emplace(string(argv[i]), "");
+                        ++i;
+                    } else {
+                        keywords.emplace(string(argv[i]), string(argv[i + 1]));
+                        i += 2;
+                    }
+                } else {
+                    positional.emplace_back(argv[i]);
+                    ++i;
+                }
+            }
+        }
+    }
 
-    // string resBody{res.body().begin(), res.body().end()};
-    // cout << resBody << endl;
+    string get(const string &key, const string &defaultValue = "") const {
+        if (keywords.count(key))
+            return keywords.find(key)->second;
+        return defaultValue;
+    }
+
+    string get(size_t idx, const string &defaultValue = "") const {
+        if (idx >= positional.size())
+            return defaultValue;
+        return positional.at(idx);
+    }
+
+    bool contains(const string& key) const {
+        return keywords.count(key);
+    }
+
+    bool contains(const vector<string>& list) {
+        for (const auto& l : list) {
+            if (keywords.count(l)) return true;
+        }
+        return false;
+    }
+
+    size_t numPositionalArgs() const noexcept {
+        return positional.size();
+    }
+};
+
+int main(int argc, const char **argv) {
+
+#ifdef _WIN32
+    WORD sockVersion = MAKEWORD(2, 2);
+    WSADATA data;
+    if (WSAStartup(sockVersion, &data) != 0) {
+        return 1;
+    }
+#endif //_WIN32
+
+    CmdParser parser{argc, argv};
+    if (parser.numPositionalArgs() != 1 || parser.contains({"-h", "--help"})) {
+        showUsage();
+        return 0;
+    }
+
+    std::string url = parser.get(0);
+    int threadCount = 4;
+    std::string proxy;
+
+    if (parser.contains("-n")) {
+        threadCount = 0;
+        for (const char c : parser.get("-n")) {
+            if (!isdigit(c)) {
+                cerr << "Invalid thread count. Using thread count = 4!" << endl;
+                threadCount = 4;
+                break;
+            }
+            threadCount = threadCount * 10 + c - '0';
+        }
+    }
+    proxy = parser.get("-x", "");
+
+
+
+    multi_get::download(url, threadCount, proxy);
 
 #ifdef _WIN32
     WSACleanup();

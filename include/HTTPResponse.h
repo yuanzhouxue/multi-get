@@ -19,7 +19,6 @@ class HTTPResponse {
         Headers,
         Body
     };
-    std::string _res;
     int _status{-1};
     std::string _statusText;
     std::vector<char> _body;

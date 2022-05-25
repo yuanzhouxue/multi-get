@@ -27,12 +27,12 @@ class Pool {
         std::cerr << "Initializing connection pool..." << std::endl;
     }
 
-    static std::shared_ptr<Connection> createConnection(const std::string &protocol, const std::string &hostname, uint16_t port) {
+    static std::shared_ptr<Connection> createConnection(const std::string &protocol, const std::string &hostname, uint16_t port, const std::string& proxy) {
         std::shared_ptr<Connection> conn;
         if (protocol == "https")
-            conn = std::make_shared<SSLConnection>(hostname, port);
+            conn = std::make_shared<SSLConnection>(hostname, port, proxy);
         else
-            conn = std::make_shared<PlainConnection>(hostname, port);
+            conn = std::make_shared<PlainConnection>(hostname, port, proxy);
 
         int retry = 5;
         while (retry--) {
@@ -51,7 +51,7 @@ class Pool {
     }
 
   public:
-    std::shared_ptr<Connection> get(const std::string &url) {
+    std::shared_ptr<Connection> get(const std::string &url, const std::string& proxy = "") {
         const auto [protocol, hostname, port] = formatHost(url);
         std::stringstream ss;
         ss << protocol << "://" << hostname << ':' << port;
@@ -65,7 +65,7 @@ class Pool {
             return res;
         } else {
             // need to create connection
-            return createConnection(protocol, hostname, port);
+            return createConnection(protocol, hostname, port, proxy);
         }
     }
 
@@ -98,8 +98,8 @@ class PoolGuard {
         conn.reset();
     }
 
-    explicit PoolGuard(const std::string& url) : url(url) {
-        conn = Pool::getInstance().get(url);
+    explicit PoolGuard(const std::string& url, const std::string& proxy = "") : url(url) {
+        conn = Pool::getInstance().get(url, proxy);
     }
 
     ~PoolGuard() {

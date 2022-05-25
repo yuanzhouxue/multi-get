@@ -1,4 +1,5 @@
 #include "Connection.h"
+#include <vector>
 
 namespace multi_get {
 
@@ -87,4 +88,65 @@ std::tuple<std::string, std::string, uint16_t> formatHost(const std::string &url
     return {protocol, hostname, port};
 }
 
+bool Connection::do_proxy_handshake() const {
+    char req[3] = {0x05, 0x01, 0x00};
+    ::send(sock, &req, sizeof(req), 0);
+    char res[2];
+    ::recv(sock, res, 2, 0);
+
+    if (res[0] != 0x05) {
+        std::cerr << "Proxy server is not a socks5 server." << std::endl;
+        return false;
+    }
+    if (res[1] != 0) {
+        std::cerr << "Proxy server doer not support no-auth." << std::endl;
+        return false;
+    }
+
+    std::vector<uint8_t> connectReq;
+    connectReq.push_back(0x05); // socks version
+    connectReq.push_back(0x01); // cmd: connect
+    connectReq.push_back(0x00); // RSV
+    connectReq.push_back(0x03); // address type: domain name
+    connectReq.push_back(static_cast<uint8_t>(hostname.length())); // domain length
+    connectReq.insert(connectReq.end(), hostname.begin(), hostname.end()); // domain name
+
+    PORT p{0, 0};
+    p.port_short = ::htons(port);
+    connectReq.push_back(p.port_chars[0]); // port
+    connectReq.push_back(p.port_chars[1]); // port
+
+    ::send(sock, connectReq.data(), connectReq.size(), 0);
+    ::recv(sock, connectReq.data(), connectReq.size(), 0);
+    if (connectReq[1] != 0  && connectReq[1] < sizeof(SOCKS_ERROR_STR) / sizeof(const char* const)) {
+        std::cerr << SOCKS_ERROR_STR[connectReq[1]] << std::endl;
+        return false;
+    }
+    return true;
+}
+void Connection::setProxy(const std::string &proxyStr) {
+    if (proxyStr.substr(0, 9) != "socks5://") return;
+
+    bool proxyAddrParsed = false;
+    std::string p_addr;
+    uint16_t p_port = 0;
+    for (int i = 9; i < proxyStr.length(); ++i) {
+        if (proxyStr[i] == ':') {
+            proxyAddrParsed = true;
+            continue;
+        }
+        if (!proxyAddrParsed) {
+            p_addr.push_back(proxyStr[i]);
+        } else {
+            if (std::isdigit(proxyStr[i])) {
+                p_port = p_port * 10 + proxyStr[i] - '0';
+            } else {
+                std::cerr << "Unsupported proxy server port." << std::endl;
+                return;
+            }
+        }
+    }
+    proxyAddr = move(p_addr);
+    proxyPort = p_port;
+}
 } // namespace multi_get

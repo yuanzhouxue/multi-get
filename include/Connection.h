@@ -36,10 +36,27 @@ namespace multi_get {
 
 class Connection {
   protected:
+    union PORT {
+        uint8_t port_chars[2];
+        uint16_t port_short;
+    };
+    constexpr static const char *const SOCKS_ERROR_STR[] = {
+        "Succeed",
+        "General SOCKS server failure",
+        "Connection not allowed by ruleset",
+        "Network unreachable",
+        "Host unreachable",
+        "Connection refused",
+        "TTL expired",
+        "Command not supported",
+        "Address type not supported"};
+
     SOCKET sock{};
     bool _connected{false};
     std::string hostname;
     uint16_t port{0};
+    std::string proxyAddr;
+    uint16_t proxyPort{0};
 
     static SOCKET openClientFd(const std::string &hostname, uint16_t port) {
         SOCKET clientFd;
@@ -81,12 +98,16 @@ class Connection {
             return true;
 
         //        const auto &[hostAddr, hostPort] = getHostAndPort(host);
-
-        sock = openClientFd(hostname, port);
-//        struct timeval timeout = {3, 0};
+        if (proxyAddr.empty()) {
+            sock = openClientFd(hostname, port);
+            _connected = true;
+        } else {
+            sock = openClientFd(proxyAddr, proxyPort);
+            _connected = do_proxy_handshake();
+        }
+        //        struct timeval timeout = {3, 0};
         //        setoption(SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(struct timeval));
-        _connected = true;
-        return true;
+        return _connected;
     }
 
     virtual ssize_t send(const char *_buf, size_t _n, int _flag = 0) const = 0;
@@ -96,8 +117,14 @@ class Connection {
         ::setsockopt(this->sock, _level, _optname, _optval, _optlen);
     }
 
+    bool do_proxy_handshake() const;
+    void setProxy(const std::string &proxyStr);
+
     Connection() = default;
     Connection(const std::string &hostname, uint16_t port) : hostname(hostname), port(port){};
+    Connection(const std::string &hostname, uint16_t port, const std::string &proxy) : Connection(hostname, port) {
+        setProxy(proxy);
+    }
 
     virtual ~Connection() {
         if (_connected)
@@ -108,6 +135,7 @@ class Connection {
 class PlainConnection : public Connection {
   public:
     PlainConnection(const std::string &hostname, uint16_t port) : Connection(hostname, port){};
+    PlainConnection(const std::string &hostname, uint16_t port, const std::string& proxy) : Connection(hostname, port, proxy){};
     ssize_t send(const char *_buf, size_t _n, int _flag) const override {
         return ::send(sock, _buf, _n, _flag);
     }
@@ -157,6 +185,7 @@ class SSLConnection : public Connection {
 
   public:
     SSLConnection(const std::string &hostname, uint16_t port) : Connection(hostname, port){};
+    SSLConnection(const std::string &hostname, uint16_t port, const std::string& proxy) : Connection(hostname, port, proxy){};
     ~SSLConnection() override {
         if (ssl) {
             ::SSL_CTX_free(ctx);
