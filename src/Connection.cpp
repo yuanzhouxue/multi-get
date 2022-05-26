@@ -40,6 +40,7 @@ bool SSLConnection::connect() {
         ctx = ::SSL_CTX_new(m);
         ssl = ::SSL_new(ctx);
         if (!ssl) {
+            LOG_ERROR("Error creating SSL context.");
             std::cerr << "Error creating SSL context." << std::endl;
             _connected = false;
             return false;
@@ -50,6 +51,7 @@ bool SSLConnection::connect() {
     int err = ::SSL_connect(ssl);
     if (err <= 0) {
         auto error = ::SSL_get_error(ssl, err);
+        LOG_ERROR("Error creating SSL connection: %d", error);
         std::cerr << "Error creating SSL connection: " << error << std::endl;
         _connected = false;
         return false;
@@ -71,6 +73,7 @@ std::tuple<std::string, std::string, uint16_t> formatHost(const std::string &url
         protocol = "https";
         beginIdx = 8;
     } else {
+        LOG_ERROR("Unsupported url: %s", url.c_str());
         std::cerr << "Unsupported url: " << url << ". The url should starts with http:// or https://" << std::endl;
         exit(EXIT_FAILURE);
     }
@@ -89,17 +92,20 @@ std::tuple<std::string, std::string, uint16_t> formatHost(const std::string &url
 }
 
 bool Connection::do_proxy_handshake() const {
+    LOG_WARN("Trying proxy socks5://%s:%d", proxyAddr.c_str(), proxyPort);
     char req[3] = {0x05, 0x01, 0x00};
     ::send(sock, req, sizeof(req), 0);
     char res[2];
     ::recv(sock, res, 2, 0);
 
     if (res[0] != 0x05) {
+        LOG_ERROR("Proxy server %s:%d is not a socks5 server.", proxyAddr.c_str(), proxyPort);
         std::cerr << "Proxy server is not a socks5 server." << std::endl;
         return false;
     }
     if (res[1] != 0) {
-        std::cerr << "Proxy server doer not support no-auth." << std::endl;
+        LOG_ERROR("Proxy server %s:%d doer not support no-auth method.", proxyAddr.c_str(), proxyPort);
+        std::cerr << "Proxy server doer not support no-auth method." << std::endl;
         return false;
     }
 
@@ -108,7 +114,7 @@ bool Connection::do_proxy_handshake() const {
     connectReq.push_back(0x01); // cmd: connect
     connectReq.push_back(0x00); // RSV
     connectReq.push_back(0x03); // address type: domain name
-    connectReq.push_back(static_cast<uint8_t>(hostname.length())); // domain length
+    connectReq.push_back(static_cast<char>(hostname.length())); // domain length
     connectReq.insert(connectReq.end(), hostname.begin(), hostname.end()); // domain name
 
     PORT p{0, 0};
@@ -141,7 +147,8 @@ void Connection::setProxy(const std::string &proxyStr) {
             if (std::isdigit(proxyStr[i])) {
                 p_port = p_port * 10 + proxyStr[i] - '0';
             } else {
-                std::cerr << "Unsupported proxy server port." << std::endl;
+                LOG_ERROR("Unsupported proxy port.");
+                std::cerr << "Unsupported proxy port." << std::endl;
                 return;
             }
         }

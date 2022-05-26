@@ -9,6 +9,9 @@
 #include <vector>
 
 #include "HTTPConnection.h"
+#include "Logger.h"
+
+
 
 #ifdef _WIN32
 #pragma comment(lib, "ws2_32.lib")
@@ -17,8 +20,6 @@
 using namespace std;
 
 namespace multi_get {
-
-std::mutex m;
 
 size_t downloadRange(const string &url, ssize_t beginPos, ssize_t endPos, const std::string &proxy = "") {
     multi_get::HTTPConnection conn{};
@@ -42,9 +43,9 @@ size_t downloadRange(const string &url, ssize_t beginPos, ssize_t endPos, const 
     out.write(res.body().data(), res.body().size());
     out.close();
 
-    lock_guard<std::mutex> locker(m);
-    std::cout << "Thread " << this_thread::get_id() << " downloaded " << res.contentLength() << " bytes" << std::endl;
-//    cout << beginPos << " " << endPos << endl;
+    std::stringstream ss;
+    ss << this_thread::get_id();
+    LOG_INFO("Thread %s downloaded %ld bytes: from %ld to %ld", ss.str().c_str(), res.contentLength(), beginPos, endPos);
     return res.contentLength();
 }
 
@@ -54,7 +55,7 @@ size_t download(const string &url, size_t threadCount = 1, const std::string &pr
     if (threadCount > 32)
         threadCount = 32;
 
-    cout << "Downloading using " << threadCount << " threads..." << endl;
+    LOG_INFO("Downloading using %zu thread(s)...", threadCount);
     auto start = std::chrono::system_clock::now();
 
     multi_get::HTTPConnection conn{};
@@ -64,73 +65,82 @@ size_t download(const string &url, size_t threadCount = 1, const std::string &pr
 
     //    res.displayHeaders();
 
+    ssize_t fileSize;
     if (!res.contains("Content-Length") || (threadCount > 1 && res["Accept-Ranges"] != string("bytes"))) {
+        LOG_WARN("The server does not support range request, using single thread to download!");
         std::cout << "The server does not support range request, using single thread to download!" << std::endl;
-        return downloadRange(url, -1, -1);
+
+        fileSize = downloadRange(url, -1, -1);
+    } else {
+
+        fileSize = std::stoi(res["Content-Length"]);
+
+        /* 必须注意到Ranges两端都是闭区间 */
+        ssize_t perThreadSize = fileSize / threadCount;
+        ssize_t remain = fileSize % threadCount;
+        ssize_t idx = -1;
+
+        vector<std::thread> threads(threadCount);
+        vector<pair<size_t, size_t>> ranges;
+        for (int i = 0; i < threadCount; ++i) {
+            auto range = perThreadSize;
+            if (remain-- > 0)
+                ++range;
+            // cout << "Thread ranges: " << idx + 1<< "-" << idx + range << endl;
+            ranges.emplace_back(idx + 1, idx + range);
+            threads[i] = std::thread{downloadRange, url, idx + 1, idx + range, proxy};
+            idx += range;
+        }
+
+        for (int i = 0; i < threadCount; ++i) {
+            threads[i].join();
+        }
+
+        string filename = url.substr(url.find_last_of('/') + 1);
+        if (filename.empty())
+            filename = "multi-get.downloaded";
+
+        if (filesystem::exists(filename))
+            filesystem::remove(filename);
+
+        ofstream output;
+        stringstream ss;
+        ss << filename << '.' << ranges[0].first << '-' << ranges[0].second;
+        string tempName = ss.str();
+        output.open(tempName, std::ios::binary | std::ios::out | std::ios::app);
+        for (int i = 1; i < ranges.size(); ++i) {
+            ss.str("");
+            ss << filename << '.' << ranges[i].first << '-' << ranges[i].second;
+            ifstream input;
+            input.open(ss.str(), std::ios::binary | std::ios::in);
+            output << input.rdbuf();
+            input.close();
+            filesystem::remove(ss.str());
+        }
+        output.close();
+        // just need rename
+        filesystem::rename(tempName, filename);
     }
-
-    ssize_t fileSize = std::stoi(res["Content-Length"]);
-
-    /* 必须注意到Ranges两端都是闭区间 */
-    ssize_t perThreadSize = fileSize / threadCount;
-    ssize_t remain = fileSize % threadCount;
-    ssize_t idx = -1;
-
-    vector<std::thread> threads(threadCount);
-    vector<pair<size_t, size_t>> ranges;
-    for (int i = 0; i < threadCount; ++i) {
-        auto range = perThreadSize;
-        if (remain-- > 0)
-            ++range;
-        // cout << "Thread ranges: " << idx + 1<< "-" << idx + range << endl;
-        ranges.emplace_back(idx + 1, idx + range);
-        threads[i] = std::thread{downloadRange, url, idx + 1, idx + range, proxy};
-        idx += range;
-    }
-
-    for (int i = 0; i < threadCount; ++i) {
-        threads[i].join();
-    }
-
-    string filename = url.substr(url.find_last_of('/') + 1);
-    if (filename.empty())
-        filename = "multi-get.downloaded";
-
-    if (filesystem::exists(filename))
-        filesystem::remove(filename);
-
-    ofstream output;
-    stringstream ss;
-    ss << filename << '.' << ranges[0].first << '-' << ranges[0].second;
-    string tempName = ss.str();
-    output.open(tempName, std::ios::binary | std::ios::out | std::ios::app);
-    for (int i = 1; i < ranges.size(); ++i) {
-        ss.str("");
-        ss << filename << '.' << ranges[i].first << '-' << ranges[i].second;
-        ifstream input;
-        input.open(ss.str(), std::ios::binary | std::ios::in);
-        output << input.rdbuf();
-        input.close();
-        filesystem::remove(ss.str());
-    }
-    output.close();
-    // just need rename
-    filesystem::rename(tempName, filename);
 
     auto end = std::chrono::system_clock::now();
     auto duration = chrono::duration_cast<chrono::microseconds>(end - start);
     auto secondsUsed = double(duration.count()) * chrono::microseconds::period::num / chrono::microseconds::period::den;
+    LOG_INFO("Time spent: %fs", secondsUsed);
     cout << "Time spent: " << secondsUsed << "s" << endl;
     auto KBps = fileSize / secondsUsed / 1024.0;
-    cout << "Average speed: ";
+
     if (KBps < 1024) {
-        cout << KBps << " KB/s" << endl;
+        cout << "Average speed: " << KBps << " KB/s" << endl;
+        LOG_INFO("Average speed: %f KB/s.", KBps);
     } else if (KBps < 1024 * 1024) {
-        cout << KBps / 1024.0 << " MB/s" << endl;
+        cout << "Average speed: " << KBps / 1024.0 << " MB/s" << endl;
+        LOG_INFO("Average speed: %f MB/s.", KBps / 1024.0);
     } else if (KBps < 1024 * 1024 * 1024) {
-        cout << KBps / 1024.0 / 1024.0 << " GB/s" << endl;
+        cout << "Average speed: " << KBps / 1024.0 / 1024.0 << " GB/s" << endl;
+        LOG_INFO("Average speed: %f GB/s.", KBps / 1024.0 / 1024.0);
     } else {
-        cout << KBps / 1024.0 / 1024.0 / 1024.0 << " TB/s" << endl;
+        cout << "Average speed: " << KBps / 1024.0 / 1024.0 / 1024.0 << " TB/s" << endl;
+        LOG_INFO("Average speed: %f TB/s.", KBps / 1024.0 / 1024.0 / 1024.0);
     }
 
     return fileSize;
@@ -194,13 +204,14 @@ class CmdParser {
         return positional.at(idx);
     }
 
-    bool contains(const string& key) const {
+    bool contains(const string &key) const {
         return keywords.count(key);
     }
 
-    bool contains(const vector<string>& list) {
-        for (const auto& l : list) {
-            if (keywords.count(l)) return true;
+    bool contains(const vector<string> &list) {
+        for (const auto &l : list) {
+            if (keywords.count(l))
+                return true;
         }
         return false;
     }
@@ -219,7 +230,7 @@ int main(int argc, const char **argv) {
         return 1;
     }
 #endif //_WIN32
-
+    LOGGER.setLogFile("multi-get.log").setTimeStamp(true);
     CmdParser parser{argc, argv};
     if (parser.numPositionalArgs() != 1 || parser.contains({"-h", "--help"})) {
         showUsage();
@@ -234,6 +245,7 @@ int main(int argc, const char **argv) {
         threadCount = 0;
         for (const char c : parser.get("-n")) {
             if (!isdigit(c)) {
+                LOG_WARN("Invalid thread count [%s]. Using thread count = 4!", parser.get("-n").c_str());
                 cerr << "Invalid thread count. Using thread count = 4!" << endl;
                 threadCount = 4;
                 break;
@@ -242,8 +254,6 @@ int main(int argc, const char **argv) {
         }
     }
     proxy = parser.get("-x", "");
-
-
 
     multi_get::download(url, threadCount, proxy);
 

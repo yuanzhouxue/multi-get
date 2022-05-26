@@ -10,6 +10,8 @@
 
 #include <openssl/ssl.h>
 
+#include "Logger.h"
+
 #ifdef _WIN32
 
 #include <WS2tcpip.h>
@@ -67,7 +69,7 @@ class Connection {
         std::string portStr = std::to_string(port);
         if (int s = ::getaddrinfo(hostname.c_str(), portStr.c_str(), &hints, &listp);
             0 != s) {
-            fprintf(stderr, "getaddrinfo: %s", gai_strerror(s));
+            LOG_ERROR("getaddrinfo: %s", gai_strerror(s));
             exit(EXIT_FAILURE);
         }
 
@@ -82,7 +84,7 @@ class Connection {
         }
         ::freeaddrinfo(listp);
         if (!p) {
-            ::perror("Connection Error");
+            ::perror("Socket Connection Error");
             exit(EXIT_FAILURE);
         }
         return clientFd;
@@ -150,7 +152,7 @@ class SSLInitializer {
     SSLInitializer() {
 #if OPENSSL_VERSION_NUMBER >= 0x10100003L
         if (::OPENSSL_init_ssl(OPENSSL_INIT_LOAD_CONFIG, nullptr) == 0) {
-            std::cerr << "Error initializing SSL connection." << std::endl;
+            LOG_ERROR("Error initializing SSL connection.");
         }
 #else
         OPENSSL_config(NULL);

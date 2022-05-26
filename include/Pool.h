@@ -24,7 +24,7 @@ class Pool {
     std::mutex m;
 
     Pool() {
-        std::cerr << "Initializing connection pool..." << std::endl;
+        LOG_INFO("Initializing connection pool...");
     }
 
     static std::shared_ptr<Connection> createConnection(const std::string &protocol, const std::string &hostname, uint16_t port, const std::string& proxy) {
@@ -39,7 +39,7 @@ class Pool {
             if (conn->connect())
                 return conn;
         }
-        std::cerr << "Connection to " << hostname << " failed." << std::endl;
+        LOG_ERROR("Connection to %s failed.", hostname.c_str());
         return conn;
     }
     ~Pool() {
@@ -47,7 +47,7 @@ class Pool {
         for (const auto& [host, pool] : http_pool) {
             size += pool.size();
         }
-        std::cerr << "Pool size: " << size << std::endl;
+        LOG_INFO("Pool size: %ld", size);
     }
 
   public:

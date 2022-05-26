@@ -63,7 +63,7 @@ void HTTPConnection::initHeaders() noexcept {
 }
 
 HTTPResponse HTTPConnection::head(const std::string &url) {
-    std::cout << "Heading url: " << url << std::endl;
+    LOG_INFO("Heading url: %s", url.c_str());
 
     auto conn = PoolGuard(url, proxy);
 
@@ -84,7 +84,7 @@ HTTPResponse HTTPConnection::head(const std::string &url) {
 }
 
 HTTPResponse HTTPConnection::get(const std::string &url) {
-    std::cerr << "Getting url: " << url << std::endl;
+    LOG_INFO("Getting url: %s", url.c_str());
     auto conn = PoolGuard(url, proxy);
 
     if (!conn->connected() && !conn->connect()) {
@@ -145,6 +145,7 @@ HTTPResponse HTTPConnection::get(const std::string &url) {
                 try {
                     buf.resize(chunkLen);
                 } catch (std::exception &e) {
+                    LOG_INFO("Failed to alloc memory, download failed.");
                     std::cerr << "Failed to alloc memory, download failed." << std::endl;
                     std::cerr << e.what() << std::endl;
                     exit(EXIT_FAILURE);

@@ -1,4 +1,7 @@
 {
     "ccls.cache.directory": ".vscode/.ccls-cache",
-    "ccls.misc.compilationDatabaseDirectory": "build"
+    "ccls.misc.compilationDatabaseDirectory": "build",
+    "files.associations": {
+        "sstream": "cpp"
+    }
 }
