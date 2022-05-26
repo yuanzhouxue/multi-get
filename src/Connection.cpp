@@ -71,7 +71,7 @@ std::tuple<std::string, std::string, uint16_t> formatHost(const std::string &url
         protocol = "https";
         beginIdx = 8;
     } else {
-        std::cerr << "Unsupported url: " << url << std::endl;
+        std::cerr << "Unsupported url: " << url << ". The url should starts with http:// or https://" << std::endl;
         exit(EXIT_FAILURE);
     }
 
@@ -90,7 +90,7 @@ std::tuple<std::string, std::string, uint16_t> formatHost(const std::string &url
 
 bool Connection::do_proxy_handshake() const {
     char req[3] = {0x05, 0x01, 0x00};
-    ::send(sock, &req, sizeof(req), 0);
+    ::send(sock, req, sizeof(req), 0);
     char res[2];
     ::recv(sock, res, 2, 0);
 
@@ -103,7 +103,7 @@ bool Connection::do_proxy_handshake() const {
         return false;
     }
 
-    std::vector<uint8_t> connectReq;
+    std::vector<char> connectReq;
     connectReq.push_back(0x05); // socks version
     connectReq.push_back(0x01); // cmd: connect
     connectReq.push_back(0x00); // RSV
