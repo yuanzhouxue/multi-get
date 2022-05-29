@@ -143,41 +143,28 @@ class Logger {
 using TextLog = Logger<TextDecorator>;
 
 #define LOGGER TextLog::getInstance()
-//#define LOG_INFO(fmt, args...)                                                                                 \
-//    do {                                                                                                       \
-//        char _buf[1024] = {0};                                                                                 \
-//        std::string filename(__FILE__);                                                                        \
-//        filename = filename.substr(filename.find_last_of('/') + 1);                                            \
-//        int len = snprintf(_buf, sizeof(_buf), "[%s:%s:%d][INFO] ", filename.c_str(), __FUNCTION__, __LINE__); \
-//        int i = 0;                                                                                             \
-//        while (fmt[i]) {                                                                                       \
-//            _buf[len++] = fmt[i++];                                                                            \
-//        }                                                                                                      \
-//        _buf[len] = '\0';                                                                                      \
-//        LOGGER.Log(_buf, ##args);                                                                              \
-//    } while (false)
 
-#define LOG_INFO(fmt, args...)                                                                                                                                                       \
+#define LOG_INFO(fmt, ...)                                                                                                                                                       \
     do {                                                                                                                                                                             \
         char _buf[1024] = {0};                                                                                                                                                       \
         snprintf(_buf, sizeof(_buf), "[ INFO][%20s:%20s:%4d] %s", std::string(__FILE__).substr(std::string(__FILE__).find_last_of("/\\") + 1).c_str(), __FUNCTION__, __LINE__, fmt); \
-        TextLog::getInstance().Log(_buf, ##args);                                                                                                                                    \
+        TextLog::getInstance().Log(_buf, ##__VA_ARGS__);                                                                                                                                    \
     } while (false)
 
 
 //"[ WARN][%20s:%20s:%4d] %s"
-#define LOG_WARN(fmt, args...)                                                                                                                                                       \
+#define LOG_WARN(fmt, ...)                                                                                                                                                       \
     do {                                                                                                                                                                             \
         char _buf[1024] = {0};                                                                                                                                                       \
         snprintf(_buf, sizeof(_buf), "[ WARN][%20s:%20s:%4d] %s", std::string(__FILE__).substr(std::string(__FILE__).find_last_of("/\\") + 1).c_str(), __FUNCTION__, __LINE__, fmt); \
-        TextLog::getInstance().Log(_buf, ##args);                                                                                                                                    \
+        TextLog::getInstance().Log(_buf, ##__VA_ARGS__);                                                                                                                                    \
     } while (false)
 
-#define LOG_ERROR(fmt, args...)                                                                                                                                                      \
+#define LOG_ERROR(fmt, ...)                                                                                                                                                      \
     do {                                                                                                                                                                             \
         char _buf[1024] = {0};                                                                                                                                                       \
         snprintf(_buf, sizeof(_buf), "[ERROR][%20s:%20s:%4d] %s", std::string(__FILE__).substr(std::string(__FILE__).find_last_of("/\\") + 1).c_str(), __FUNCTION__, __LINE__, fmt); \
-        TextLog::getInstance().Log(_buf, ##args);                                                                                                                                    \
+        TextLog::getInstance().Log(_buf, ##__VA_ARGS__);                                                                                                                                    \
     } while (false)
 
 #endif // MULTI_GET_LOGGER_H
