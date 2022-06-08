@@ -118,7 +118,7 @@ bool Connection::do_proxy_handshake() const {
     connectReq.insert(connectReq.end(), hostname.begin(), hostname.end()); // domain name
 
     PORT p{0, 0};
-    p.port_short = ::htons(port);
+    p.port_short = htons(port);
     connectReq.push_back(p.port_chars[0]); // port
     connectReq.push_back(p.port_chars[1]); // port
 
