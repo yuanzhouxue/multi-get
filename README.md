@@ -1,6 +1,8 @@
 # 使用C++编写的多线程HTTP下载器
 
-此项目为玩具项目，主要用于练手。项目目标：在尽量不使用第三方库的情况下支持以下功能：
+[Github](https://github.com/yuanzhouxue/multi-get)
+
+项目目标：在尽量不使用第三方库的情况下支持以下功能：
 
 - [x] HTTP下载
 - [x] HTTPS下载（基于OpenSSL）
