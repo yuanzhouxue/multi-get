@@ -8,7 +8,6 @@
 - [x] 处理HTTP重定向状态码
 - [x] 支持Linux平台
 - [x] 支持Windows平台
-- [x] 支持socks5代理
 
 ## 文档
 
@@ -21,8 +20,6 @@
 [3、多线程下载](docs/MultiThread.md)
 
 [4、支持HTTPS](docs/HTTPS.md)
-
-[5、支持socks5代理](docs/socks5.md)
 
 <!-- [重定向请求的处理](docs/Redirect.md) -->
 
