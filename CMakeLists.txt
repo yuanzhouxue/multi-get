@@ -19,14 +19,18 @@ find_package(OpenSSL REQUIRED)
 
 aux_source_directory(src srcs)
 
-add_executable(multi-get ${srcs})
-target_link_libraries(multi-get ${CMAKE_THREAD_LIBS_INIT} OpenSSL::SSL)
+add_executable(${PROJECT_NAME} ${srcs})
+target_link_libraries(${PROJECT_NAME} ${CMAKE_THREAD_LIBS_INIT} OpenSSL::SSL)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    target_link_libraries(${PROJECT_NAME} ws2_32)
+endif()
 # Clang和GCC需要额外链接stdc++fs，而MSVC不需要
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    target_link_libraries(multi-get stdc++fs)
+    target_link_libraries(${PROJECT_NAME} stdc++fs)
 endif()
 
-install(TARGETS multi-get
+install(TARGETS ${PROJECT_NAME}
         COMPONENT applications
         DESTINATION "bin"
 )

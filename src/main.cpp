@@ -11,12 +11,6 @@
 #include "HTTPConnection.h"
 #include "Logger.h"
 
-
-
-#ifdef _WIN32
-#pragma comment(lib, "ws2_32.lib")
-#endif
-
 using namespace std;
 
 namespace multi_get {
