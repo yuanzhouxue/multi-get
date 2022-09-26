@@ -7,6 +7,7 @@
 #include <iostream>
 #include <string>
 #include <tuple>
+#include <utility>
 
 #include <openssl/ssl.h>
 
@@ -17,9 +18,26 @@
 #include <WS2tcpip.h>
 #include <winsock2.h>
 using ssize_t = SSIZE_T;
-inline void close(SOCKET sock) {
+using socket_t = SOCKET;
+inline void close_socket(socket_t sock) {
     ::closesocket(sock);
 }
+
+class WSInit {
+    bool is_valid{false};
+public:
+    WSInit() {
+        WSAData wsadata{};
+        is_valid = (WSAStartup(MAKEWORD(2, 2), &wsadata) == 0);
+    }
+    ~WSInit() {
+        if (is_valid) {
+            WSACleanup();
+        }
+    }
+};
+
+[[maybe_unused]] static WSInit init_ws;
 
 #elif __linux__
 #include <arpa/inet.h>
@@ -28,7 +46,10 @@ inline void close(SOCKET sock) {
 #include <sys/socket.h>
 #include <unistd.h>
 
-using SOCKET = int;
+using socket_t = int;
+inline void close_socket(socket_t sock) {
+    ::close(sock);
+}
 
 #else
 #error "Unsupported platform"
@@ -39,7 +60,7 @@ namespace multi_get {
 class Connection {
   protected:
     union PORT {
-        uint8_t port_chars[2];
+        char port_chars[2];
         uint16_t port_short;
     };
     constexpr static const char *const SOCKS_ERROR_STR[] = {
@@ -53,15 +74,15 @@ class Connection {
         "Command not supported",
         "Address type not supported"};
 
-    SOCKET sock{};
+    socket_t sock{};
     bool _connected{false};
     std::string hostname;
     uint16_t port{0};
     std::string proxyAddr;
     uint16_t proxyPort{0};
 
-    static SOCKET openClientFd(const std::string &hostname, uint16_t port) {
-        SOCKET clientFd;
+    static socket_t openClientFd(const std::string &hostname, uint16_t port) {
+        socket_t clientFd;
         addrinfo hints{}, *listp, *p;
         std::memset(&hints, 0, sizeof(hints));
         hints.ai_socktype = SOCK_STREAM;
@@ -77,10 +98,10 @@ class Connection {
             if ((clientFd = ::socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) {
                 continue;
             }
-            if (::connect(clientFd, p->ai_addr, p->ai_addrlen) != -1) {
+            if (::connect(clientFd, p->ai_addr, static_cast<int>(p->ai_addrlen)) != -1) {
                 break;
             }
-            ::close(clientFd);
+            close_socket(clientFd);
         }
         ::freeaddrinfo(listp);
         if (!p) {
@@ -112,25 +133,22 @@ class Connection {
         return _connected;
     }
 
-    virtual ssize_t send(const char *_buf, size_t _n, int _flag = 0) const = 0;
-    virtual ssize_t receive(char *_buf, size_t _n, int _flag = 0) const = 0;
+    virtual ssize_t send(const char *_buf, size_t _n) const = 0;
+    virtual ssize_t receive(char *_buf, size_t _n) const = 0;
+    void receiveNBytes(char* _buf, size_t n) const;
 
-    void setoption(int _level, int _optname, const char *_optval, socklen_t _optlen) noexcept {
-        ::setsockopt(this->sock, _level, _optname, _optval, _optlen);
-    }
-
-    bool do_proxy_handshake() const;
+    [[nodiscard]] bool do_proxy_handshake() const;
     void setProxy(const std::string &proxyStr);
 
     Connection() = default;
-    Connection(const std::string &hostname, uint16_t port) : hostname(hostname), port(port){};
+    Connection(std::string hostname, uint16_t port) : hostname(std::move(hostname)), port(port){};
     Connection(const std::string &hostname, uint16_t port, const std::string &proxy) : Connection(hostname, port) {
         setProxy(proxy);
     }
 
     virtual ~Connection() {
         if (_connected)
-            ::close(sock);
+            close_socket(sock);
     }
 };
 
@@ -138,12 +156,12 @@ class PlainConnection : public Connection {
   public:
     PlainConnection(const std::string &hostname, uint16_t port) : Connection(hostname, port){};
     PlainConnection(const std::string &hostname, uint16_t port, const std::string& proxy) : Connection(hostname, port, proxy){};
-    ssize_t send(const char *_buf, size_t _n, int _flag) const override {
-        return ::send(sock, _buf, _n, _flag);
+    ssize_t send(const char *_buf, size_t _n) const override {
+        return ::send(sock, _buf, static_cast<int>(_n), 0);
     }
 
-    ssize_t receive(char *_buf, size_t _n, int _flag) const override {
-        return ::recv(sock, _buf, _n, _flag);
+    ssize_t receive(char *_buf, size_t _n) const override {
+        return ::recv(sock, _buf, static_cast<int>(_n), 0);
     }
 };
 
@@ -179,9 +197,9 @@ class SSLConnection : public Connection {
     SSL_CTX *ctx{};
 
   protected:
-    ssize_t send(const char *_buf, size_t _n, int _flag) const override;
+    ssize_t send(const char *_buf, size_t _n) const override;
 
-    ssize_t receive(char *_buf, size_t _n, int _flag) const override;
+    ssize_t receive(char *_buf, size_t _n) const override;
 
     bool connect() override;
 
@@ -197,7 +215,7 @@ class SSLConnection : public Connection {
     }
 };
 
-std::tuple<std::string, std::string, uint16_t> formatHost(const std::string &url);
+std::tuple<std::string, std::string, uint16_t, std::string> formatHost(const std::string &url);
 
 } // namespace multi_get
 

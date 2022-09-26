@@ -52,7 +52,7 @@ class Pool {
 
   public:
     std::shared_ptr<Connection> get(const std::string &url, const std::string& proxy = "") {
-        const auto [protocol, hostname, port] = formatHost(url);
+        const auto [protocol, hostname, port, _] = formatHost(url);
         std::stringstream ss;
         ss << protocol << "://" << hostname << ':' << port;
         const std::string key = ss.str();
@@ -70,7 +70,7 @@ class Pool {
     }
 
     void put(const std::string &url, std::shared_ptr<Connection> &&conn) {
-        const auto [protocol, hostname, port] = formatHost(url);
+        const auto [protocol, hostname, port, _] = formatHost(url);
         std::stringstream ss;
         ss << protocol << "://" << hostname << ':' << port;
         const std::string key = ss.str();
@@ -94,7 +94,7 @@ class PoolGuard {
     }
 
     void release() {
-        Pool::getInstance().put(url, move(conn));
+        Pool::getInstance().put(url, std::move(conn));
         conn.reset();
     }
 

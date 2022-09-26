@@ -15,10 +15,15 @@
 
 static std::string getTime() {
     std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    auto tt = std::localtime(&now);
-    std::stringstream ss;
-    ss << std::put_time(tt, "%Y.%m.%d %H:%M:%S");
-    return ss.str();
+    static char tmp[32] = {};
+    tm stime{};
+#if defined(_WIN32) || defined(_WIN64)
+    localtime_s(&stime, &now);
+#elif defined(__linux__)
+    localtime_r(&now, &stime);
+#endif
+    std::strftime(tmp, sizeof(tmp), "%Y.%m.%d %H:%M:%S", &stime);
+    return {tmp};
 }
 
 // ============================================================

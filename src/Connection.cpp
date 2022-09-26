@@ -3,7 +3,7 @@
 
 namespace multi_get {
 
-ssize_t SSLConnection::send(const char *_buf, size_t _n, int) const {
+ssize_t SSLConnection::send(const char *_buf, size_t _n) const {
     auto len = ::SSL_write(ssl, _buf, int(_n));
     if (len < 0) {
         int err = ::SSL_get_error(ssl, len);
@@ -16,7 +16,7 @@ ssize_t SSLConnection::send(const char *_buf, size_t _n, int) const {
     return len;
 }
 
-ssize_t SSLConnection::receive(char *_buf, size_t _n, int) const {
+ssize_t SSLConnection::receive(char *_buf, size_t _n) const {
     auto len = ::SSL_read(ssl, _buf, int(_n));
     if (len < 0) {
         int err = ::SSL_get_error(ssl, len);
@@ -46,7 +46,7 @@ bool SSLConnection::connect() {
             return false;
         }
     }
-    ::SSL_set_fd(ssl, sock);
+    ::SSL_set_fd(ssl, static_cast<int>(sock));
 
     int err = ::SSL_connect(ssl);
     if (err <= 0) {
@@ -60,9 +60,10 @@ bool SSLConnection::connect() {
     return true;
 }
 
-std::tuple<std::string, std::string, uint16_t> formatHost(const std::string &url) {
+std::tuple<std::string, std::string, uint16_t, std::string> formatHost(const std::string &url) {
     std::string protocol;
     std::string hostname;
+    std::string path;
     uint16_t port = 0;
 
     size_t beginIdx;
@@ -78,7 +79,13 @@ std::tuple<std::string, std::string, uint16_t> formatHost(const std::string &url
         exit(EXIT_FAILURE);
     }
 
-    auto hostPart = url.substr(beginIdx, url.find_first_of('/', beginIdx) - beginIdx);
+    auto pathBeginIdx = url.find_first_of('/', beginIdx);
+    if (pathBeginIdx == std::string::npos) {
+        path = "/";
+    } else {
+        path = url.substr(pathBeginIdx);
+    }
+    auto hostPart = url.substr(beginIdx,  pathBeginIdx - beginIdx);
     if (auto idx = hostPart.find_first_of(':');
         idx != std::string::npos) {
         hostname = hostPart.substr(0, idx);
@@ -88,7 +95,7 @@ std::tuple<std::string, std::string, uint16_t> formatHost(const std::string &url
         port = protocol == "https" ? 443 : 80;
     }
 
-    return {protocol, hostname, port};
+    return {protocol, hostname, port, path};
 }
 
 bool Connection::do_proxy_handshake() const {
@@ -122,8 +129,8 @@ bool Connection::do_proxy_handshake() const {
     connectReq.push_back(p.port_chars[0]); // port
     connectReq.push_back(p.port_chars[1]); // port
 
-    ::send(sock, connectReq.data(), connectReq.size(), 0);
-    ::recv(sock, connectReq.data(), connectReq.size(), 0);
+    ::send(sock, connectReq.data(), static_cast<int>(connectReq.size()), 0);
+    ::recv(sock, connectReq.data(), static_cast<int>(connectReq.size()), 0);
     if (connectReq[1] != 0  && connectReq[1] < sizeof(SOCKS_ERROR_STR) / sizeof(const char* const)) {
         std::cerr << SOCKS_ERROR_STR[connectReq[1]] << std::endl;
         return false;
@@ -153,7 +160,24 @@ void Connection::setProxy(const std::string &proxyStr) {
             }
         }
     }
-    proxyAddr = move(p_addr);
+    proxyAddr = std::move(p_addr);
     proxyPort = p_port;
 }
+
+void Connection::receiveNBytes(char *_buf, size_t n) const {
+    auto remainBytes = n;
+    ssize_t len;
+    while (remainBytes && (len = receive(_buf, remainBytes)) <= remainBytes) {
+        if (len == -1) {
+            perror("receive n bytes");
+            break;
+        } else if (len == 0) {
+            std::cerr << "peer closed..." << std::endl;
+            break;
+        }
+        remainBytes -= len;
+        _buf += len;
+    }
+}
+
 } // namespace multi_get

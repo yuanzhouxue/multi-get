@@ -70,9 +70,9 @@ HTTPResponse HTTPConnection::head(const std::string &url) {
     if (!conn->connected() && !conn->connect()) {
         return HTTPResponse{};
     }
-    auto [_, hostname, _port] = formatHost(url);
+    auto [_, hostname, _port, path] = formatHost(url);
     headers["Host"] = hostname;
-    auto req = constructHeaders(url, "HEAD");
+    auto req = constructHeaders(path, "HEAD");
     conn->send(req.data(), req.length());
     auto res = receiveHTTPHeaders(conn);
     //    res.displayHeaders();
@@ -91,9 +91,9 @@ HTTPResponse HTTPConnection::get(const std::string &url) {
         return HTTPResponse{};
     }
 
-    auto [_, hostname, _port] = formatHost(url);
+    auto [_, hostname, _port, path] = formatHost(url);
     headers["Host"] = hostname;
-    auto req = constructHeaders(url);
+    auto req = constructHeaders(path);
     conn->send(req.data(), req.length());
 
     auto resp = receiveHTTPHeaders(conn);
@@ -106,38 +106,24 @@ HTTPResponse HTTPConnection::get(const std::string &url) {
     std::vector<char> buf(BUF_SIZE);
     std::vector<char> body;
     if (resp.contains("Content-Length")) {
-        int contentLength = std::stoi(resp["Content-Length"]);
-        ssize_t len = 0;
-        size_t totalLen = 0;
-        body.reserve(contentLength);
-        while ((len = conn->receive(buf.data(), buf.size())) != 0) {
-            body.insert(body.end(), std::begin(buf), std::begin(buf) + len);
-            totalLen += len;
-            if (totalLen == contentLength) {
-                break;
-            }
-        }
+        auto contentLength = std::stoull(resp["Content-Length"]);
+        body.resize(contentLength);
+        conn->receiveNBytes(body.data(), contentLength);
     } else if (resp.contains("Transfer-Encoding") && resp["Transfer-Encoding"].find("chunked") != std::string::npos) {
-        // 采用chunk方式传输
-        //        std::cerr << "chunked" << std::endl;
         char response;
         size_t chunkLen = 0;
-
-        ssize_t len = 0;
+        std::string chunkLength;
         while (true) {
-            chunkLen = 0;
             while (conn->receive(&response, 1) != 0) {
                 if (response == '\r') {
                     conn->receive(&response, 1);
                     break;
                 } else {
-                    if (response >= '0' && response <= '9')
-                        chunkLen = chunkLen * 16 + response - '0';
-                    else if (tolower(response) >= 'a' && tolower(response) <= 'f') {
-                        chunkLen = chunkLen * 16 + 10 + tolower(response) - 'a';
-                    }
+                    chunkLength += response;
                 }
             }
+            chunkLen = std::stoull(chunkLength, nullptr, 16);
+            chunkLength.clear();
             if (chunkLen == 0)
                 break;
 
@@ -151,62 +137,23 @@ HTTPResponse HTTPConnection::get(const std::string &url) {
                     exit(EXIT_FAILURE);
                 }
             }
-            auto remainBytes = chunkLen;
-            while (remainBytes && (len = conn->receive(buf.data(), remainBytes)) <= remainBytes) {
-                if (len == -1) {
-                    if (errno == EWOULDBLOCK || errno == EAGAIN) {
-                        std::cerr << "recv timeout ...\n";
-                        break;
-                    } else if (errno == EINTR) {
-                        std::cerr << "interrupt by signal..." << std::endl;
-                        continue;
-                    } else if (errno == ENOENT) {
-                        std::cerr << "recv RST segement..." << std::endl;
-                        break;
-                    } else {
-                        std::cerr << "unknown error!" << std::endl;
-                        exit(1);
-                    }
-                } else if (len == 0) {
-                    std::cerr << "peer closed..." << std::endl;
-                    break;
-                } else {
-                    body.insert(body.end(), std::begin(buf), std::begin(buf) + len);
-                    //                if (len != buf.size())
-                    //                    break;
-                }
-                remainBytes -= len;
-            }
-
+            conn->receiveNBytes(buf.data(), chunkLen);
+            body.insert(end(body), begin(buf), begin(buf) + chunkLen);
             //  取出\r\n
-            conn->receive(&response, 1);
-            conn->receive(&response, 1);
+            conn->receiveNBytes(buf.data(), 2);
         }
     } else {
         ssize_t len = 0;
         while (true) {
             len = conn->receive(buf.data(), buf.size());
-            if (len == -1) {
-                if (errno == EWOULDBLOCK || errno == EAGAIN) {
-                    std::cerr << "recv timeout ...\n";
-                    break;
-                } else if (errno == EINTR) {
-                    std::cerr << "interrupt by signal..." << std::endl;
-                    continue;
-                } else if (errno == ENOENT) {
-                    std::cerr << "recv RST segement..." << std::endl;
-                    break;
-                } else {
-                    std::cerr << "unknown error!" << std::endl;
-                    exit(1);
-                }
+            if (len < 0) {
+                perror("receive without length");
+                break;
             } else if (len == 0) {
                 std::cerr << "peer closed..." << std::endl;
                 break;
             } else {
                 body.insert(body.end(), std::begin(buf), std::begin(buf) + len);
-                //                if (len != buf.size())
-                //                    break;
             }
         }
     }

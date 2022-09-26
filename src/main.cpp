@@ -33,6 +33,7 @@ size_t downloadRange(const string &url, ssize_t beginPos, ssize_t endPos, const 
         filename.append(ss.str());
     }
     auto res = conn.get(url);
+    res.displayHeaders();
     ofstream out(filename, ios::binary);
     out.write(res.body().data(), res.body().size());
     out.close();
@@ -57,7 +58,7 @@ size_t download(const string &url, size_t threadCount = 1, const std::string &pr
         conn.setProxy(proxy);
     auto res = conn.head(url);
 
-    //    res.displayHeaders();
+    res.displayHeaders();
 
     ssize_t fileSize;
     if (!res.contains("Content-Length") || (threadCount > 1 && res["Accept-Ranges"] != string("bytes"))) {
@@ -216,14 +217,6 @@ class CmdParser {
 };
 
 int main(int argc, const char **argv) {
-
-#ifdef _WIN32
-    WORD sockVersion = MAKEWORD(2, 2);
-    WSADATA data;
-    if (WSAStartup(sockVersion, &data) != 0) {
-        return 1;
-    }
-#endif //_WIN32
     LOGGER.setLogFile("multi-get.log").setTimeStamp(true);
     CmdParser parser{argc, argv};
     if (parser.numPositionalArgs() != 1 || parser.contains({"-h", "--help"})) {
@@ -248,12 +241,6 @@ int main(int argc, const char **argv) {
         }
     }
     proxy = parser.get("-x", "");
-
     multi_get::download(url, threadCount, proxy);
-
-#ifdef _WIN32
-    WSACleanup();
-#endif // _WIN32
-
     return 0;
 }
