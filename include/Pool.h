@@ -14,6 +14,9 @@
 #include <unordered_set>
 
 #include "Connection.h"
+#include "SSLConnection.h"
+#include "Utils.h"
+#include "Logger.h"
 
 namespace multi_get {
 
@@ -31,8 +34,9 @@ class Pool {
         std::shared_ptr<Connection> conn;
         if (protocol == "https")
             conn = std::make_shared<SSLConnection>(hostname, port, proxy);
-        else
-            conn = std::make_shared<PlainConnection>(hostname, port, proxy);
+        else {
+            conn = std::make_shared<Connection>(hostname, port, proxy);
+        }
 
         int retry = 5;
         while (retry--) {
