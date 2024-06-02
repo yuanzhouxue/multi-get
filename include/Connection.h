@@ -39,7 +39,7 @@ public:
 
 [[maybe_unused]] static WSInit init_ws;
 
-#elif __linux__
+#elif __linux__ || __APPLE__
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>

@@ -10,6 +10,7 @@
 - [x] 处理HTTP重定向状态码
 - [x] 支持Linux平台
 - [x] 支持Windows平台
+- [x] 支持mac OS平台
 
 ## 文档
 
