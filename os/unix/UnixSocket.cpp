@@ -1,7 +1,6 @@
 
 #include <memory>
 #include <string>
-#include <sys/_types/_ssize_t.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <format>
@@ -24,8 +23,12 @@ unique_ptr<Socket> createSocket(const std::string &host, Port port) {
     return make_unique<UnixSocket>(host, port);
 }
 
+Port htons(Port p) {
+    return ::htons(p);
+}
+
 UnixSocket::UnixSocket(const std::string& host, Port port): host(host), port(port) {
-    auto sock = ::socket(AF_INET, SOCK_STREAM, 0);
+    sock = ::socket(AF_INET, SOCK_STREAM, 0);
 }
 
 bool UnixSocket::connected() const {
@@ -39,7 +42,7 @@ bool UnixSocket::connect() {
 
     socket_t clientFd;
     addrinfo hints{}, *listp, *p;
-    std::memset(&hints, 0, sizeof(hints));
+    ::memset(&hints, 0, sizeof(hints));
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_NUMERICSERV | AI_ADDRCONFIG;
     std::string portStr = std::to_string(port);

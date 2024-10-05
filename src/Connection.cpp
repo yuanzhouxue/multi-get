@@ -1,7 +1,6 @@
 
 #include <algorithm>
 #include <string>
-#include <sys/_types/_ssize_t.h>
 #include <vector>
 
 #include "Connection.h"
